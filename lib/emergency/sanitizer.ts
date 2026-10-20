@@ -35,6 +35,7 @@ export interface ResponderPayload {
   blood_group?: string | null;
   emergency_contact_name?: string | null;
   emergency_contact_phone?: string | null;
+  visible_categories: string[];
   items: SanitizedResponderItem[];
   grouped: {
     allergy: SanitizedResponderItem[];
@@ -43,6 +44,10 @@ export interface ResponderPayload {
     implant: SanitizedResponderItem[];
   };
   allergy_display_fallback: string;
+  category_unshared_notices: {
+    allergy: string;
+    medication: string;
+  };
 }
 
 /**
@@ -150,10 +155,15 @@ export function sanitizeResponderData(params: {
     blood_group: showBloodGroup ? profile?.blood_group || null : null,
     emergency_contact_name: showEmergencyContact ? profile?.emergency_contact_name || null : null,
     emergency_contact_phone: showEmergencyContact ? profile?.emergency_contact_phone || null : null,
+    visible_categories: visibleCategories || [],
     items: sanitizedList,
     grouped,
     // Clinical requirement: never say "No allergies"; state clearly that none are recorded.
     allergy_display_fallback: "No allergy information recorded",
+    category_unshared_notices: {
+      allergy: "Allergies: not shared on this card. Ask the patient or family.",
+      medication: "Medications: not shared on this card. Ask the patient or family.",
+    },
   };
 }
 

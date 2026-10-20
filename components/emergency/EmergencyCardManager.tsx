@@ -21,6 +21,7 @@ import {
   Cpu,
   FileCheck2,
   ExternalLink,
+  Download,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -219,6 +220,16 @@ export function EmergencyCardManager() {
     setTimeout(() => setCopied(false), 3000);
   };
 
+  const handleDownloadQrImage = () => {
+    if (!qrDataUrl) return;
+    const a = document.createElement("a");
+    a.href = qrDataUrl;
+    a.download = `medrecord-emergency-qr-${Date.now()}.png`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
   const handlePrintCard = () => {
     window.print();
   };
@@ -343,7 +354,17 @@ export function EmergencyCardManager() {
           </CardDescription>
         </CardHeader>
 
-        <CardContent className="p-6">
+        <CardContent className="p-6 space-y-4">
+          <div className="bg-amber-50/90 border border-amber-200 rounded-xl p-3.5 flex items-start gap-3 text-amber-900 text-xs">
+            <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+            <div className="space-y-0.5">
+              <span className="font-bold block">Public Access Warning:</span>
+              <p>
+                Anyone who has this link or scans your emergency QR code will be able to view the categories selected below without logging in. This includes your name, blood group, and emergency contact phone number. Only enable categories you want first responders to access.
+              </p>
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {CATEGORIES.map((cat) => {
               const Icon = cat.icon;
@@ -444,8 +465,13 @@ export function EmergencyCardManager() {
                     Secure Emergency Link Created (Shown Once)
                   </CardTitle>
                 </div>
-                <CardDescription className="text-xs text-amber-800">
-                  For your privacy, this raw link will not be displayed again after you leave this page. Copy it now or print the card.
+                <CardDescription className="text-xs text-amber-900 leading-relaxed space-y-1">
+                  <p>
+                    <strong>Save or Download Now:</strong> For security, only a cryptographic SHA-256 hash of your token is stored in our database. Once you leave this page, the raw link and QR code cannot be retrieved or shown again.
+                  </p>
+                  <p className="text-[11px] text-amber-800">
+                    If you lose this link, re-showing the QR code requires <strong>regenerating</strong> the card, which immediately and permanently invalidates this link.
+                  </p>
                 </CardDescription>
               </CardHeader>
 
@@ -482,11 +508,21 @@ export function EmergencyCardManager() {
                       <Button
                         size="sm"
                         variant="outline"
+                        onClick={handleDownloadQrImage}
+                        className="text-xs h-8 border-gray-300 text-gray-700 hover:bg-gray-50"
+                      >
+                        <Download className="h-3.5 w-3.5 mr-1" />
+                        Download QR Image
+                      </Button>
+
+                      <Button
+                        size="sm"
+                        variant="outline"
                         onClick={() => setShowPrintModal(true)}
                         className="text-xs h-8 border-gray-300 text-gray-700 hover:bg-gray-50"
                       >
                         <Printer className="h-3.5 w-3.5 mr-1" />
-                        Print Wallet Card PDF
+                        Download Wallet PDF
                       </Button>
 
                       <a
@@ -622,13 +658,40 @@ export function EmergencyCardManager() {
               </div>
             )}
 
-            {selectedCats.includes("allergy") && (
+            {/* Allergies: never omitted silently */}
+            {selectedCats.includes("allergy") ? (
               <div className="rounded-xl border border-rose-200 p-4 space-y-2">
                 <span className="text-xs font-bold text-rose-700 uppercase">Allergies:</span>
                 <p className="text-sm font-semibold text-gray-900">
                   {confirmedCounts.allergy > 0
                     ? `${confirmedCounts.allergy} confirmed allergy records will appear here.`
                     : "No allergy information recorded"}
+                </p>
+              </div>
+            ) : (
+              <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50/80 p-4 space-y-1">
+                <span className="text-xs font-bold text-gray-600 uppercase">Allergies:</span>
+                <p className="text-sm font-medium text-gray-600">
+                  Allergies: not shared on this card. Ask the patient or family.
+                </p>
+              </div>
+            )}
+
+            {/* Medications: never omitted silently */}
+            {selectedCats.includes("medication") ? (
+              <div className="rounded-xl border border-blue-200 p-4 space-y-2">
+                <span className="text-xs font-bold text-blue-700 uppercase">Active Medications:</span>
+                <p className="text-sm font-semibold text-gray-900">
+                  {confirmedCounts.medication > 0
+                    ? `${confirmedCounts.medication} confirmed active medications will appear here.`
+                    : "No active medications shared on this card"}
+                </p>
+              </div>
+            ) : (
+              <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50/80 p-4 space-y-1">
+                <span className="text-xs font-bold text-gray-600 uppercase">Active Medications:</span>
+                <p className="text-sm font-medium text-gray-600">
+                  Medications: not shared on this card. Ask the patient or family.
                 </p>
               </div>
             )}

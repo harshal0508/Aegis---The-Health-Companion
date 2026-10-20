@@ -1,12 +1,10 @@
-import { notFound } from "next/navigation";
+import React from "react";
 import { headers } from "next/headers";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { ShieldAlert, AlertTriangle, Phone, Activity, Pill, Scissors, Cpu, Heart } from "lucide-react";
-import { hashEmergencyToken, hashIpAddress, checkEmergencyRateLimit } from "@/lib/emergency/token";
-import { isValidEmergencyToken, formatAllergyItem } from "@/lib/emergency/sanitizer";
+import { ShieldAlert, AlertTriangle, Phone, Activity, Pill, Cpu, Heart } from "lucide-react";
 import { formatClinicalDate, getDateAge } from "@/lib/utils";
-import { createClient } from "@/lib/supabase/server";
+import { getEmergencyResponderData } from "@/lib/emergency/responder";
 import type { Metadata } from "next";
 
 export const dynamic = "force-dynamic";
@@ -20,16 +18,8 @@ export const metadata: Metadata = {
     follow: false,
     nocache: true,
   },
+  referrer: "no-referrer",
 };
-
-interface ResponderItem {
-  id: string;
-  category: string;
-  value: string;
-  doc_type?: string | null;
-  doc_date?: string | null;
-  doc_date_type?: string | null;
-}
 
 export default async function EmergencyCardPage({
   params,
@@ -38,19 +28,14 @@ export default async function EmergencyCardPage({
 }) {
   const { token } = await params;
 
-  if (!isValidEmergencyToken(token)) {
-    notFound();
-  }
-
-  // 1. Rate Limiting by Client IP hash (30 requests/min)
   const headerList = await headers();
   const forwardedFor = headerList.get("x-forwarded-for");
   const rawIp = forwardedFor ? forwardedFor.split(",")[0].trim() : headerList.get("x-real-ip") || "127.0.0.1";
   const userAgent = headerList.get("user-agent") || "unknown";
-  const ipHash = hashIpAddress(rawIp);
 
-  const { allowed } = checkEmergencyRateLimit(ipHash);
-  if (!allowed) {
+  const result = await getEmergencyResponderData(token, rawIp, userAgent);
+
+  if (result.rateLimited) {
     return (
       <main className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="bg-white border rounded-xl p-6 max-w-sm text-center space-y-2 shadow-sm">
@@ -64,109 +49,13 @@ export default async function EmergencyCardPage({
     );
   }
 
-  // 2. Hash token and look up active emergency card using Service Role
-  // Service role is required because the responder is unauthenticated (no login)
-  const tokenHash = hashEmergencyToken(token);
-  const supabase = await createClient(true);
-
-  const { data: card, error: cardErr } = await supabase
-    .from("emergency_cards")
-    .select("id, visible_categories, active, user_id, created_at")
-    .eq("token_hash", tokenHash)
-    .maybeSingle();
-
-  // Rule: Return the same generic "not found" for invalid, disabled and unknown tokens
-  if (cardErr || !card || card.active !== true) {
-    notFound();
-  }
-
-  // 3. Log access audit trail server-side (fire & forget to avoid slowing responder)
-  void supabase.from("access_log").insert({
-    card_id: card.id,
-    accessed_at: new Date().toISOString(),
-    ip_hash: ipHash,
-    user_agent: userAgent.slice(0, 200),
-  });
-
-  const visibleCats: string[] = card.visible_categories || [];
-
-  // 4. Fetch Profile (Name, Blood Group, Emergency Contact) ONLY if permitted
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("full_name, blood_group, emergency_contact_name, emergency_contact_phone")
-    .eq("id", card.user_id)
-    .single();
-
-  // 5. Fetch ONLY CONFIRMED items for allowed categories
-  // Minimal query: NO document IDs, NO storage paths, NO user_id returned to client
-  const { data: confirmedRows } = await supabase
-    .from("items")
-    .select("id, category, value, page_id, created_at")
-    .eq("user_id", card.user_id)
-    .eq("status", "confirmed")
-    .in("category", visibleCats);
-
-  // Fetch document dates/types for items to display age (without exposing document IDs or storage paths)
-  const pageIds = Array.from(new Set((confirmedRows || []).map((r) => r.page_id).filter(Boolean)));
-  const pageMetaMap = new Map<string, { doc_type: string; doc_date: string | null; doc_date_type: string }>();
-
-  if (pageIds.length > 0) {
-    const { data: pageRows } = await supabase
-      .from("pages")
-      .select("id, document_id")
-      .in("id", pageIds);
-
-    const docIds = Array.from(new Set((pageRows || []).map((p) => p.document_id)));
-    if (docIds.length > 0) {
-      const { data: docRows } = await supabase
-        .from("documents")
-        .select("id, doc_type, doc_date, doc_date_type")
-        .in("id", docIds);
-
-      const docMap = new Map((docRows || []).map((d) => [d.id, d]));
-      (pageRows || []).forEach((p) => {
-        const d = docMap.get(p.document_id);
-        if (d) {
-          pageMetaMap.set(p.id, {
-            doc_type: d.doc_type || "Medical Document",
-            doc_date: d.doc_date,
-            doc_date_type: d.doc_date_type || "dated",
-          });
-        }
-      });
-    }
-  }
-
-  const items: ResponderItem[] = (confirmedRows || []).map((row) => {
-    const meta = row.page_id ? pageMetaMap.get(row.page_id) : null;
-    return {
-      id: row.id,
-      category: row.category,
-      value: row.value,
-      doc_type: meta?.doc_type ?? null,
-      doc_date: meta?.doc_date ?? null,
-      doc_date_type: meta?.doc_date_type ?? null,
-    };
-  });
-
-  // Group items by category
-  const groupedItems: Record<string, ResponderItem[]> = {};
-  items.forEach((item) => {
-    if (!groupedItems[item.category]) groupedItems[item.category] = [];
-    groupedItems[item.category].push(item);
-  });
-
-  const showBloodGroup = visibleCats.includes("blood_group");
-  const showEmergencyContact = visibleCats.includes("emergency_contact");
-  const showAllergies = visibleCats.includes("allergy");
-  const showMedications = visibleCats.includes("medication");
-  const showConditions = visibleCats.includes("condition");
-  const showImplants = visibleCats.includes("implant");
-
-  const allergyItems = groupedItems["allergy"] || [];
-  const medItems = groupedItems["medication"] || [];
-  const condItems = groupedItems["condition"] || [];
-  const implantItems = groupedItems["implant"] || [];
+  const data = result.data!;
+  const showBloodGroup = data.visible_categories.includes("blood_group");
+  const showEmergencyContact = data.visible_categories.includes("emergency_contact");
+  const showAllergies = data.visible_categories.includes("allergy");
+  const showMedications = data.visible_categories.includes("medication");
+  const showConditions = data.visible_categories.includes("condition");
+  const showImplants = data.visible_categories.includes("implant");
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900 px-4 py-8 antialiased selection:bg-rose-100 selection:text-rose-900">
@@ -181,41 +70,41 @@ export default async function EmergencyCardPage({
           </div>
 
           <h1 className="mt-3 text-3xl font-extrabold tracking-tight">
-            {profile?.full_name || "Patient Record"}
+            {data.full_name || "Patient Record"}
           </h1>
 
-          {showBloodGroup && profile?.blood_group && (
+          {showBloodGroup && data.blood_group && (
             <div className="mt-3 inline-flex items-center gap-2 bg-white text-rose-700 px-3 py-1.5 rounded-lg text-sm font-bold shadow-sm">
               <Heart className="h-4 w-4 fill-rose-600 text-rose-600" />
-              Blood Group: {profile.blood_group}
+              Blood Group: {data.blood_group}
             </div>
           )}
         </div>
 
         {/* Emergency Contact */}
         {showEmergencyContact &&
-          (profile?.emergency_contact_name || profile?.emergency_contact_phone) && (
+          (data.emergency_contact_name || data.emergency_contact_phone) && (
             <div className="rounded-xl border bg-white p-5 shadow-sm space-y-1">
               <span className="text-xs font-bold uppercase tracking-wider text-gray-500">
                 Emergency Contact
               </span>
               <p className="text-base font-semibold text-gray-900">
-                {profile?.emergency_contact_name || "Emergency Contact"}
+                {data.emergency_contact_name || "Emergency Contact"}
               </p>
-              {profile?.emergency_contact_phone && (
+              {data.emergency_contact_phone && (
                 <a
-                  href={`tel:${profile.emergency_contact_phone}`}
+                  href={`tel:${data.emergency_contact_phone}`}
                   className="inline-flex items-center gap-1.5 text-base font-bold text-teal-700 hover:text-teal-800 hover:underline pt-1"
                 >
                   <Phone className="h-4 w-4" />
-                  {profile.emergency_contact_phone}
+                  {data.emergency_contact_phone}
                 </a>
               )}
             </div>
           )}
 
-        {/* 1. Allergies & Adverse Reactions (Highest Clinical Priority) */}
-        {showAllergies && (
+        {/* 1. Allergies & Adverse Reactions */}
+        {showAllergies ? (
           <section className="rounded-xl border-2 border-rose-200 bg-white p-5 shadow-sm space-y-3">
             <div className="flex items-center justify-between border-b pb-2">
               <div className="flex items-center gap-2 text-rose-700">
@@ -229,14 +118,13 @@ export default async function EmergencyCardPage({
               </Badge>
             </div>
 
-            {allergyItems.length === 0 ? (
+            {data.grouped.allergy.length === 0 ? (
               <p className="text-sm text-gray-500 italic py-1">
-                No allergy information recorded
+                {data.allergy_display_fallback}
               </p>
             ) : (
               <ul className="space-y-3 divide-y divide-gray-100">
-                {allergyItems.map((item) => {
-                  const display = formatAllergyItem(item);
+                {data.grouped.allergy.map((item) => {
                   const isNkda =
                     item.value.toLowerCase().includes("no known drug allergies") ||
                     item.value.toLowerCase().includes("nkda");
@@ -244,7 +132,7 @@ export default async function EmergencyCardPage({
                   return (
                     <li key={item.id} className="pt-2 first:pt-0">
                       <p className="text-base font-bold text-gray-900 leading-snug">
-                        {display}
+                        {item.display_text || item.value}
                       </p>
                       {item.doc_date && !isNkda && (
                         <p className="text-xs text-gray-500 mt-0.5">
@@ -257,10 +145,23 @@ export default async function EmergencyCardPage({
               </ul>
             )}
           </section>
+        ) : (
+          /* Clinical Safety Rule: Never omit allergies silently when toggled off */
+          <section className="rounded-xl border border-dashed border-gray-300 bg-gray-50/80 p-4 space-y-1">
+            <div className="flex items-center gap-2 text-gray-700">
+              <ShieldAlert className="h-4 w-4 text-gray-500" />
+              <h2 className="text-xs font-bold uppercase tracking-wider text-gray-700">
+                Allergies & Sensitivities
+              </h2>
+            </div>
+            <p className="text-sm font-medium text-gray-600">
+              {data.category_unshared_notices.allergy}
+            </p>
+          </section>
         )}
 
         {/* 2. Active Medications */}
-        {showMedications && (
+        {showMedications ? (
           <section className="rounded-xl border bg-white p-5 shadow-sm space-y-3">
             <div className="flex items-center gap-2 text-blue-700 border-b pb-2">
               <Pill className="h-5 w-5" />
@@ -269,13 +170,13 @@ export default async function EmergencyCardPage({
               </h2>
             </div>
 
-            {medItems.length === 0 ? (
+            {data.grouped.medication.length === 0 ? (
               <p className="text-sm text-gray-500 italic py-1">
                 No medications shared on this card
               </p>
             ) : (
               <ul className="space-y-2.5 divide-y divide-gray-100">
-                {medItems.map((item) => (
+                {data.grouped.medication.map((item) => (
                   <li key={item.id} className="pt-2 first:pt-0">
                     <p className="text-base font-semibold text-gray-900 leading-snug">
                       {item.value}
@@ -290,6 +191,19 @@ export default async function EmergencyCardPage({
               </ul>
             )}
           </section>
+        ) : (
+          /* Clinical Safety Rule: Never omit medications silently when toggled off */
+          <section className="rounded-xl border border-dashed border-gray-300 bg-gray-50/80 p-4 space-y-1">
+            <div className="flex items-center gap-2 text-gray-700">
+              <Pill className="h-4 w-4 text-gray-500" />
+              <h2 className="text-xs font-bold uppercase tracking-wider text-gray-700">
+                Active Medications
+              </h2>
+            </div>
+            <p className="text-sm font-medium text-gray-600">
+              {data.category_unshared_notices.medication}
+            </p>
+          </section>
         )}
 
         {/* 3. Chronic Conditions & Diagnoses */}
@@ -302,13 +216,13 @@ export default async function EmergencyCardPage({
               </h2>
             </div>
 
-            {condItems.length === 0 ? (
+            {data.grouped.condition.length === 0 ? (
               <p className="text-sm text-gray-500 italic py-1">
                 No conditions shared on this card
               </p>
             ) : (
               <ul className="space-y-2.5 divide-y divide-gray-100">
-                {condItems.map((item) => (
+                {data.grouped.condition.map((item) => (
                   <li key={item.id} className="pt-2 first:pt-0">
                     <p className="text-base font-medium text-gray-900 leading-snug">
                       {item.value}
@@ -335,13 +249,13 @@ export default async function EmergencyCardPage({
               </h2>
             </div>
 
-            {implantItems.length === 0 ? (
+            {data.grouped.implant.length === 0 ? (
               <p className="text-sm text-gray-500 italic py-1">
                 No implants recorded
               </p>
             ) : (
               <ul className="space-y-2">
-                {implantItems.map((item) => (
+                {data.grouped.implant.map((item) => (
                   <li key={item.id} className="text-base font-medium text-gray-900">
                     {item.value}
                   </li>
@@ -349,18 +263,6 @@ export default async function EmergencyCardPage({
               </ul>
             )}
           </section>
-        )}
-
-        {/* Empty state fallback if user disabled all categories */}
-        {visibleCats.length === 0 && (
-          <div className="bg-white border rounded-xl p-8 text-center space-y-2">
-            <p className="text-sm font-semibold text-gray-700">
-              No categories enabled
-            </p>
-            <p className="text-xs text-gray-500">
-              The cardholder has not selected any medical categories to share on this emergency card.
-            </p>
-          </div>
         )}
 
         <Separator />

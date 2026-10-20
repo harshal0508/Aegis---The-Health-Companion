@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import crypto from "crypto";
 import {
   generateEmergencyToken,
@@ -14,6 +14,40 @@ import {
   type RawDbItem,
   type PageDocMeta,
 } from "@/lib/emergency/sanitizer";
+
+// Mock next/navigation for route handler tests
+vi.mock("next/navigation", () => ({
+  notFound: vi.fn(() => {
+    const error = new Error("NEXT_NOT_FOUND");
+    (error as any).digest = "NEXT_NOT_FOUND";
+    throw error;
+  }),
+}));
+
+// Mock next/headers
+vi.mock("next/headers", () => ({
+  headers: vi.fn(async () => ({
+    get: (name: string) => {
+      if (name === "x-forwarded-for") return "192.168.1.50";
+      if (name === "user-agent") return "Vitest Test Runner";
+      return null;
+    },
+  })),
+  cookies: vi.fn(async () => ({
+    getAll: () => [],
+    set: () => {},
+  })),
+}));
+
+let mockSupabaseInstance: any = null;
+
+vi.mock("@/lib/supabase/server", () => ({
+  createClient: vi.fn(async () => mockSupabaseInstance),
+}));
+
+import { getEmergencyResponderData } from "@/lib/emergency/responder";
+import EmergencyCardPage from "@/app/e/[token]/page";
+import { notFound } from "next/navigation";
 
 describe("Phase 5: Emergency Card System", () => {
   // ── 1. Cryptographic Token Generation & Hashing ─────────────────────────────
@@ -249,6 +283,21 @@ describe("Phase 5: Emergency Card System", () => {
       expect(result.allergy_display_fallback).not.toBe("No allergies");
     });
 
+    it("provides explicit unshared category notices when allergies or medications are toggled off", () => {
+      const result = sanitizeResponderData({
+        rawItems: [],
+        visibleCategories: ["blood_group"], // allergies & medications off
+        profile: { full_name: "Test Patient" },
+      });
+
+      expect(result.category_unshared_notices.allergy).toBe(
+        "Allergies: not shared on this card. Ask the patient or family."
+      );
+      expect(result.category_unshared_notices.medication).toBe(
+        "Medications: not shared on this card. Ask the patient or family."
+      );
+    });
+
     it("formats NKDA with document type and signed date provenance", () => {
       const nkdaItem = {
         value: "No Known Drug Allergies (NKDA)",
@@ -308,6 +357,217 @@ describe("Phase 5: Emergency Card System", () => {
       expect((payload as any).medications).toBeUndefined();
       expect((payload as any).allergies).toBeUndefined();
       expect((payload as any).conditions).toBeUndefined();
+    });
+  });
+
+  // ── 6. Route Handler & Service-Role Query Tests (/e/[token]) ────────────────
+  describe("Route Handler /e/[token] End-to-End Execution", () => {
+    const validToken = generateEmergencyToken();
+    const tokenHash = hashEmergencyToken(validToken);
+
+    // Mock DB fixtures
+    const mockCardActive = {
+      id: "card-uuid-1",
+      user_id: "user-uuid-999",
+      visible_categories: ["condition", "blood_group"], // Note: allergy and medication are OFF
+      active: true,
+      token_hash: tokenHash,
+      created_at: "2026-10-20T10:00:00Z",
+    };
+
+    const mockCardDisabled = {
+      ...mockCardActive,
+      active: false,
+    };
+
+    const mockProfile = {
+      full_name: "Vikram Malhotra",
+      blood_group: "AB+",
+      emergency_contact_name: "Ananya Malhotra",
+      emergency_contact_phone: "+91 98765 00000",
+    };
+
+    const mockDbItems = [
+      {
+        id: "item-conf-cond",
+        user_id: "user-uuid-999",
+        category: "condition",
+        value: "Hypertension",
+        status: "confirmed",
+        page_id: "page-1",
+      },
+      {
+        id: "item-unconf-cond",
+        user_id: "user-uuid-999",
+        category: "condition",
+        value: "Unconfirmed Condition",
+        status: "needs_review", // UNCONFIRMED
+        page_id: "page-1",
+      },
+      {
+        id: "item-conf-med",
+        user_id: "user-uuid-999",
+        category: "medication",
+        value: "Amlodipine 5mg",
+        status: "confirmed", // BUT category is not in visible_categories
+        page_id: "page-1",
+      },
+    ];
+
+    function createMockSupabase(cardRecord: any, profileRecord: any, itemRows: any[]) {
+      return {
+        from: (table: string) => {
+          if (table === "emergency_cards") {
+            return {
+              select: () => ({
+                eq: (col: string, val: string) => ({
+                  maybeSingle: async () => ({
+                    data: val === tokenHash ? cardRecord : null,
+                    error: null,
+                  }),
+                }),
+              }),
+            };
+          }
+          if (table === "access_log") {
+            return {
+              insert: async () => ({ error: null }),
+            };
+          }
+          if (table === "profiles") {
+            return {
+              select: () => ({
+                eq: () => ({
+                  single: async () => ({
+                    data: profileRecord,
+                    error: null,
+                  }),
+                }),
+              }),
+            };
+          }
+          if (table === "items") {
+            return {
+              select: () => ({
+                eq: (col1: string, val1: string) => ({
+                  eq: (col2: string, val2: string) => ({
+                    in: (col3: string, allowedCats: string[]) => ({
+                      data: itemRows.filter(
+                        (i) => i.status === "confirmed" && allowedCats.includes(i.category)
+                      ),
+                      error: null,
+                    }),
+                  }),
+                }),
+              }),
+            };
+          }
+          if (table === "pages") {
+            return {
+              select: () => ({
+                in: async () => ({
+                  data: [{ id: "page-1", document_id: "doc-1" }],
+                  error: null,
+                }),
+              }),
+            };
+          }
+          if (table === "documents") {
+            return {
+              select: () => ({
+                in: async () => ({
+                  data: [
+                    {
+                      id: "doc-1",
+                      doc_type: "Discharge Summary",
+                      doc_date: "2026-06-01",
+                      doc_date_type: "signed",
+                    },
+                  ],
+                  error: null,
+                }),
+              }),
+            };
+          }
+          return { select: () => ({ eq: () => ({}) }) };
+        },
+      };
+    }
+
+    it("triggers notFound() when token format is invalid (<20 chars)", async () => {
+      await expect(getEmergencyResponderData("invalid_short")).rejects.toThrow("NEXT_NOT_FOUND");
+    });
+
+    it("triggers notFound() when token does not exist in database", async () => {
+      const mockSb = createMockSupabase(null, mockProfile, mockDbItems);
+      const randomValidToken = generateEmergencyToken();
+      await expect(
+        getEmergencyResponderData(randomValidToken, "127.0.0.1", "test", mockSb)
+      ).rejects.toThrow("NEXT_NOT_FOUND");
+    });
+
+    it("triggers notFound() when emergency card is disabled (active: false)", async () => {
+      const mockSb = createMockSupabase(mockCardDisabled, mockProfile, mockDbItems);
+      await expect(
+        getEmergencyResponderData(validToken, "127.0.0.1", "test", mockSb)
+      ).rejects.toThrow("NEXT_NOT_FOUND");
+    });
+
+    it("reads active card via service role, applies sanitizer, and drops unconfirmed/unselected items", async () => {
+      const mockSb = createMockSupabase(mockCardActive, mockProfile, mockDbItems);
+      const result = await getEmergencyResponderData(validToken, "10.10.10.10", "test", mockSb);
+
+      expect(result.rateLimited).toBeUndefined();
+      expect(result.data).toBeDefined();
+
+      const payload = result.data!;
+      expect(payload.full_name).toBe("Vikram Malhotra");
+      expect(payload.blood_group).toBe("AB+"); // enabled in visible_categories
+
+      // Condition was enabled -> Confirmed condition is present, unconfirmed is excluded
+      expect(payload.grouped.condition).toHaveLength(1);
+      expect(payload.grouped.condition[0].value).toBe("Hypertension");
+
+      // Medication was confirmed in DB, BUT medication category was toggled OFF -> excluded
+      expect(payload.grouped.medication).toHaveLength(0);
+
+      // Allergies and Medications were toggled OFF -> explicit clinical notices present
+      expect(payload.category_unshared_notices.allergy).toBe(
+        "Allergies: not shared on this card. Ask the patient or family."
+      );
+      expect(payload.category_unshared_notices.medication).toBe(
+        "Medications: not shared on this card. Ask the patient or family."
+      );
+
+      // Privacy: Zero internal ID leakage in payload
+      const serialized = JSON.stringify(payload);
+      expect(serialized).not.toContain("user-uuid-999");
+      expect(serialized).not.toContain("card-uuid-1");
+      expect(serialized).not.toContain("doc-1");
+      expect(serialized).not.toContain("page-1");
+    });
+
+    it("renders EmergencyCardPage component cleanly with explicit unshared category banners", async () => {
+      mockSupabaseInstance = createMockSupabase(mockCardActive, mockProfile, mockDbItems);
+
+      const pageResult = await EmergencyCardPage({
+        params: Promise.resolve({ token: validToken }),
+      });
+
+      // The returned JSX tree is a React component element
+      expect(pageResult).toBeDefined();
+      expect(pageResult.type).toBe("main");
+
+      const stringifiedTree = JSON.stringify(pageResult);
+      // Confirmed patient name rendered
+      expect(stringifiedTree).toContain("Vikram Malhotra");
+      // Explicit unshared category banner rendered because allergy was toggled off
+      expect(stringifiedTree).toContain("Allergies: not shared on this card. Ask the patient or family.");
+      // Explicit unshared category banner rendered because medication was toggled off
+      expect(stringifiedTree).toContain("Medications: not shared on this card. Ask the patient or family.");
+      // Confirms zero internal IDs leaked anywhere in React tree props
+      expect(stringifiedTree).not.toContain("user-uuid-999");
+      expect(stringifiedTree).not.toContain("card-uuid-1");
     });
   });
 });
