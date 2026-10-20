@@ -1,0 +1,51 @@
+# Run RLS tests on every push and pull request.
+# Requires: SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY as repo secrets.
+# supabase/setup-cli outputs the keys for the local instance automatically.
+
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+
+jobs:
+  rls-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start local Supabase
+        # Captures the output (anon_key, service_role_key) for subsequent steps
+        id: supabase
+        run: supabase start
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run RLS tests
+        run: npx vitest run tests/rls
+        env:
+          SUPABASE_URL: http://localhost:54321
+          # supabase/setup-cli outputs these after `supabase start`
+          SUPABASE_ANON_KEY: ${{ steps.supabase.outputs.anon_key }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ steps.supabase.outputs.service_role_key }}
+          # App server is not started in CI — /e/[token] HTTP tests will warn and skip
+          NEXT_PUBLIC_APP_URL: http://localhost:3000
+
+      - name: Stop Supabase
+        if: always()
+        run: supabase stop

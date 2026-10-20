@@ -1,0 +1,38 @@
+# HealthTECH / MedRecord
+# Patient-owned health records PWA
+
+# Environment — never commit real keys
+.env
+.env.local
+.env.*
+.env.*.local
+*.env
+
+# Test files and synthetic documents
+test-files/
+
+# Dependencies
+node_modules/
+
+# Next.js build output
+.next/
+out/
+
+# Supabase local data
+supabase/.branches/
+supabase/.temp/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+
+# Test coverage
+coverage/
+
+# PWA service worker (generated at build time)
+public/sw.js
+public/workbox-*.js

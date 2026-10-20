@@ -1,0 +1,5 @@
+// Playwright E2E tests — Phase 2+
+// No tests implemented in Phase 1.
+// This directory is here so the playwright.config.ts testDir resolves correctly.
+
+export {};

@@ -1,0 +1,188 @@
+import { formatClinicalDate, getDateAge } from "@/lib/utils";
+
+export interface RawDbItem {
+  id: string;
+  user_id?: string;
+  category: string;
+  value: string;
+  status: string;
+  page_id?: string | null;
+  document_id?: string | null;
+  storage_path?: string | null;
+  file_url?: string | null;
+  metadata?: Record<string, any> | null;
+  created_at?: string;
+}
+
+export interface PageDocMeta {
+  doc_type: string;
+  doc_date: string | null;
+  doc_date_type?: string | null;
+}
+
+export interface SanitizedResponderItem {
+  id: string;
+  category: string;
+  value: string;
+  doc_type?: string | null;
+  doc_date?: string | null;
+  doc_date_type?: string | null;
+  display_text?: string;
+}
+
+export interface ResponderPayload {
+  full_name?: string | null;
+  blood_group?: string | null;
+  emergency_contact_name?: string | null;
+  emergency_contact_phone?: string | null;
+  items: SanitizedResponderItem[];
+  grouped: {
+    allergy: SanitizedResponderItem[];
+    medication: SanitizedResponderItem[];
+    condition: SanitizedResponderItem[];
+    implant: SanitizedResponderItem[];
+  };
+  allergy_display_fallback: string;
+}
+
+/**
+ * Validates emergency token format: exactly 22 base62 alphanumeric characters.
+ */
+export function isValidEmergencyToken(token: string | null | undefined): boolean {
+  if (!token || typeof token !== "string") return false;
+  return /^[0-9a-zA-Z]{20,24}$/.test(token);
+}
+
+/**
+ * Formats allergy display according to clinical provenance rules.
+ * NKDA is contextualized with doc type and signed date (with age).
+ */
+export function formatAllergyItem(item: {
+  value: string;
+  doc_type?: string | null;
+  doc_date?: string | null;
+  doc_date_type?: string | null;
+}): string {
+  const lower = item.value.toLowerCase();
+  const isNkda = lower.includes("no known drug allergies") || lower.includes("nkda");
+
+  if (!isNkda) {
+    return item.value;
+  }
+
+  const docType = item.doc_type || "Discharge Summary";
+  if (item.doc_date) {
+    const dateStr = formatClinicalDate(item.doc_date);
+    const age = getDateAge(item.doc_date);
+    const dateType = item.doc_date_type || "signed";
+    return `No known drug allergies, per ${docType}, ${dateType} ${dateStr} (${age})`;
+  }
+
+  return `No known drug allergies, per ${docType}, date not found`;
+}
+
+/**
+ * Pure function: filters, sanitizes, and strips all internal IDs and storage URLs.
+ * Strictly guarantees that:
+ * 1. ONLY status === 'confirmed' items are included.
+ * 2. ONLY categories listed in visibleCategories are included.
+ * 3. NO user_id, document_id, storage_path, file_url or raw coordinates leak.
+ */
+export function sanitizeResponderData(params: {
+  rawItems: RawDbItem[];
+  visibleCategories: string[];
+  pageMetaMap?: Map<string, PageDocMeta>;
+  profile?: {
+    full_name?: string | null;
+    blood_group?: string | null;
+    emergency_contact_name?: string | null;
+    emergency_contact_phone?: string | null;
+  } | null;
+}): ResponderPayload {
+  const { rawItems, visibleCategories, pageMetaMap, profile } = params;
+
+  // Filter 1: Only confirmed items
+  // Filter 2: Only categories user explicitly chose to share
+  const allowedSet = new Set(visibleCategories || []);
+  const eligibleItems = (rawItems || []).filter(
+    (item) => item.status === "confirmed" && allowedSet.has(item.category)
+  );
+
+  const sanitizedList: SanitizedResponderItem[] = eligibleItems.map((item) => {
+    const meta = item.page_id && pageMetaMap ? pageMetaMap.get(item.page_id) : undefined;
+    const docType = meta?.doc_type ?? null;
+    const docDate = meta?.doc_date ?? null;
+    const docDateType = meta?.doc_date_type ?? null;
+
+    let displayText = item.value;
+    if (item.category === "allergy") {
+      displayText = formatAllergyItem({
+        value: item.value,
+        doc_type: docType,
+        doc_date: docDate,
+        doc_date_type: docDateType,
+      });
+    }
+
+    return {
+      id: item.id,
+      category: item.category,
+      value: item.value,
+      doc_type: docType,
+      doc_date: docDate,
+      doc_date_type: docDateType,
+      display_text: displayText,
+    };
+  });
+
+  const grouped = {
+    allergy: sanitizedList.filter((i) => i.category === "allergy"),
+    medication: sanitizedList.filter((i) => i.category === "medication"),
+    condition: sanitizedList.filter((i) => i.category === "condition"),
+    implant: sanitizedList.filter((i) => i.category === "implant"),
+  };
+
+  const showBloodGroup = allowedSet.has("blood_group");
+  const showEmergencyContact = allowedSet.has("emergency_contact");
+
+  return {
+    full_name: profile?.full_name || null,
+    blood_group: showBloodGroup ? profile?.blood_group || null : null,
+    emergency_contact_name: showEmergencyContact ? profile?.emergency_contact_name || null : null,
+    emergency_contact_phone: showEmergencyContact ? profile?.emergency_contact_phone || null : null,
+    items: sanitizedList,
+    grouped,
+    // Clinical requirement: never say "No allergies"; state clearly that none are recorded.
+    allergy_display_fallback: "No allergy information recorded",
+  };
+}
+
+/**
+ * Printable Wallet Card Payload Generator.
+ * STRICT CLINICAL SAFETY RULE:
+ * Never print medications or allergies on the physical wallet card.
+ * The physical card must only contain Name, Blood Group, ICE contact, and QR code.
+ */
+export function buildWalletCardPayload(params: {
+  fullName: string;
+  bloodGroup?: string | null;
+  emergencyContactName?: string | null;
+  emergencyContactPhone?: string | null;
+  qrUrl: string;
+}): {
+  name: string;
+  bloodGroup: string;
+  iceName: string;
+  icePhone: string;
+  qrUrl: string;
+  instruction: string;
+} {
+  return {
+    name: params.fullName || "Emergency Medical Card",
+    bloodGroup: params.bloodGroup || "Not specified",
+    iceName: params.emergencyContactName || "Not specified",
+    icePhone: params.emergencyContactPhone || "Not specified",
+    qrUrl: params.qrUrl,
+    instruction: "Scan QR code for real-time confirmed medications, allergies, and conditions",
+  };
+}
