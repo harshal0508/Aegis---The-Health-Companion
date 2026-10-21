@@ -39,12 +39,20 @@ export default async function EmergencyCardPage({
   if (result.rateLimited) {
     return (
       <main className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="bg-white border rounded-xl p-6 max-w-sm text-center space-y-2 shadow-sm">
+        <div className="bg-white border rounded-xl p-6 max-w-sm text-center space-y-3 shadow-sm">
           <AlertTriangle className="h-8 w-8 text-amber-600 mx-auto" />
           <h1 className="text-base font-bold text-gray-900">Too Many Requests</h1>
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-gray-600 leading-relaxed">
             Rate limit exceeded for emergency card access. Please retry in a few moments.
           </p>
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-left space-y-1">
+            <span className="text-[11px] font-bold text-amber-900 block">
+              Using a shared hospital or clinic Wi-Fi?
+            </span>
+            <p className="text-[11px] text-amber-800 leading-normal">
+              Multiple devices on the same network share one IP address. If this limit was reached, try switching to mobile data (cellular), or ask someone to open the QR link from a different device.
+            </p>
+          </div>
         </div>
       </main>
     );
@@ -286,7 +294,7 @@ export default async function EmergencyCardPage({
             </Link>
           </div>
           <p className="text-[11px] text-gray-400 font-mono">
-            Powered by MedRecord Emergency Access • Secure 128-bit Token
+            Powered by MedRecord Emergency Access • Long Random Link
           </p>
         </footer>
       </div>

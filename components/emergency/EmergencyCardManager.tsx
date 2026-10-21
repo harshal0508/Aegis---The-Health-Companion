@@ -435,7 +435,7 @@ export function EmergencyCardManager() {
           <div>
             <h2 className="text-lg font-bold text-gray-900">Create Your Emergency Card</h2>
             <p className="text-xs text-muted-foreground max-w-md mx-auto mt-1">
-              Generates a 128-bit random secure URL and QR code. First responders scan this to see only the categories you enabled.
+              Generates a long random secure URL and QR code. First responders scan this to see only the categories you enabled.
             </p>
           </div>
           <Button

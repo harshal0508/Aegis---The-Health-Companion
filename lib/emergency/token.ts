@@ -32,9 +32,16 @@ export function hashEmergencyToken(token: string): string {
 
 /**
  * Anonymously hashes an IP address for audit logging without storing raw PII.
+ * Requires IP_HASH_SALT in environment; strictly fails with an error if missing
+ * to prevent reversible IP rainbow-table attacks.
  */
 export function hashIpAddress(ip: string): string {
-  const salt = process.env.IP_HASH_SALT || "medrecord_emergency_salt_2026";
+  const salt = process.env.IP_HASH_SALT;
+  if (!salt) {
+    throw new Error(
+      "CRITICAL SECURITY CONFIGURATION ERROR: IP_HASH_SALT is not set in environment variables. Refusing to hash client IP with an insecure default salt."
+    );
+  }
   return crypto.createHash("sha256").update((ip || "unknown") + salt).digest("hex").slice(0, 16);
 }
 

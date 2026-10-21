@@ -102,6 +102,12 @@ describe("Phase 5: Emergency Card System", () => {
 
   // ── 2. Client IP Anonymization & Rate Limiting ─────────────────────────────
   describe("IP Anonymization and Rate Limiting", () => {
+    beforeEach(() => {
+      if (!process.env.IP_HASH_SALT) {
+        process.env.IP_HASH_SALT = "test-salt-secret-key-12345";
+      }
+    });
+
     it("anonymizes IP addresses deterministically with salt", () => {
       const ip = "192.168.1.100";
       const hash1 = hashIpAddress(ip);
@@ -115,6 +121,18 @@ describe("Phase 5: Emergency Card System", () => {
       const hashA = hashIpAddress("10.0.0.1");
       const hashB = hashIpAddress("10.0.0.2");
       expect(hashA).not.toBe(hashB);
+    });
+
+    it("fails with a critical security error if IP_HASH_SALT is missing", () => {
+      const originalSalt = process.env.IP_HASH_SALT;
+      try {
+        delete process.env.IP_HASH_SALT;
+        expect(() => hashIpAddress("127.0.0.1")).toThrow(
+          "CRITICAL SECURITY CONFIGURATION ERROR: IP_HASH_SALT is not set"
+        );
+      } finally {
+        process.env.IP_HASH_SALT = originalSalt;
+      }
     });
 
     it("enforces sliding rate limit of 30 requests per minute", () => {
@@ -621,7 +639,7 @@ describe("Phase 5: Emergency Card System", () => {
       expect(serverClientSrc).not.toContain("serviceRole = false");
     });
 
-    it("ensures no logged-in routes or client components import createServiceRoleClient", async () => {
+    it("ensures no route under app/ (except app/e/) or lib/ (except allowlist) imports createServiceRoleClient or references SUPABASE_SERVICE_ROLE_KEY", async () => {
       const fs = await import("fs");
       const path = await import("path");
 
@@ -639,19 +657,33 @@ describe("Phase 5: Emergency Card System", () => {
         return fileList;
       }
 
-      const clientDirs = [
-        path.resolve(process.cwd(), "app/(app)"),
-        path.resolve(process.cwd(), "app/(auth)"),
+      // Allowlist of files permitted to reference service role:
+      // 1. lib/supabase/service-role.ts (creates the client)
+      // 2. lib/emergency/responder.ts (uses it for unauthenticated public responder lookup)
+      // 3. app/e/ (the public emergency responder route folder)
+      const isAllowedFile = (filePath: string) => {
+        const normalized = filePath.replace(/\\/g, "/");
+        if (normalized.endsWith("lib/supabase/service-role.ts")) return true;
+        if (normalized.endsWith("lib/emergency/responder.ts")) return true;
+        if (normalized.includes("/app/e/")) return true;
+        return false;
+      };
+
+      const scanDirs = [
+        path.resolve(process.cwd(), "app"),
+        path.resolve(process.cwd(), "lib"),
         path.resolve(process.cwd(), "components"),
       ];
 
-      for (const dir of clientDirs) {
+      for (const dir of scanDirs) {
         const files = getFiles(dir);
         for (const file of files) {
+          if (isAllowedFile(file)) continue;
+
           const content = fs.readFileSync(file, "utf8");
           expect(
             content,
-            `File ${file} must NOT import createServiceRoleClient or reference SUPABASE_SERVICE_ROLE_KEY`
+            `File ${file} must NOT import createServiceRoleClient`
           ).not.toContain("createServiceRoleClient");
           expect(
             content,

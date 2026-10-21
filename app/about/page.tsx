@@ -79,14 +79,14 @@ export default function AboutClinicalScopePage() {
               <div className="flex items-start gap-2.5">
                 <span className="font-bold text-emerald-700">✓</span>
                 <p>
-                  <strong>Patient-Verified:</strong> Nothing is added to your permanent health summary until you review, edit, and confirm it.
+                  <strong>Patient-Confirmed:</strong> Items appear on your emergency card only after you confirm them.
                 </p>
               </div>
 
               <div className="flex items-start gap-2.5">
                 <span className="font-bold text-emerald-700">✓</span>
                 <p>
-                  <strong>Emergency First-Responder Access:</strong> Generates a revocable QR code for wallet cards so ER doctors can view patient-confirmed critical details in an emergency without needing a password.
+                  <strong>Emergency First-Responder Access:</strong> Generates a printable wallet card with a long random link and QR code, allowing ER doctors to view patient-confirmed critical details in an emergency without needing a password.
                 </p>
               </div>
             </CardContent>
@@ -120,14 +120,7 @@ export default function AboutClinicalScopePage() {
               <div className="flex items-start gap-2.5">
                 <span className="font-bold text-rose-600">✗</span>
                 <p>
-                  <strong>NOT 100% Infallible:</strong> AI reading handwritten, faded, or blurry photos can make mistakes, miss items, or misinterpret abbreviations. Human verification is always mandatory.
-                </p>
-              </div>
-
-              <div className="flex items-start gap-2.5">
-                <span className="font-bold text-rose-600">✗</span>
-                <p>
-                  <strong>NOT an Automated Health Monitor:</strong> It does not track real-time vitals, alert emergency services automatically, or connect to hospital dispatch networks.
+                  <strong>NOT Infallible:</strong> AI reading handwritten, faded, or blurry photos can make mistakes, miss items, or misinterpret abbreviations. Human verification is always mandatory.
                 </p>
               </div>
             </CardContent>
