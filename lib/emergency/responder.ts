@@ -27,6 +27,7 @@ export async function getEmergencyResponderData(
 ): Promise<EmergencyRouteResult> {
   // 1. Validate token format
   if (!isValidEmergencyToken(token)) {
+    console.warn(`[getEmergencyResponderData] Invalid token format: '${token}' (length: ${token?.length})`);
     notFound();
   }
 
@@ -34,6 +35,7 @@ export async function getEmergencyResponderData(
   const ipHash = hashIpAddress(clientIp);
   const { allowed } = checkEmergencyRateLimit(ipHash);
   if (!allowed) {
+    console.warn(`[getEmergencyResponderData] Rate limit exceeded for IP hash`);
     return { rateLimited: true };
   }
 
@@ -47,6 +49,16 @@ export async function getEmergencyResponderData(
     .select("id, visible_categories, active, user_id, created_at")
     .eq("token_hash", tokenHash)
     .maybeSingle();
+
+  if (cardErr) {
+    console.error("[getEmergencyResponderData] Supabase lookup error:", cardErr);
+  }
+
+  if (!card) {
+    console.warn(`[getEmergencyResponderData] No card found for token_hash: ${tokenHash.slice(0, 8)}...`);
+  } else if (card.active !== true) {
+    console.warn(`[getEmergencyResponderData] Card found but active is false`);
+  }
 
   // Return identical generic 404 for invalid, unknown, or disabled tokens
   if (cardErr || !card || card.active !== true) {
