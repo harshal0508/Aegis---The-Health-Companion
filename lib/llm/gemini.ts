@@ -36,7 +36,26 @@ export class GeminiProvider implements LLMProvider {
 
   constructor(apiKey?: string, model?: string) {
     this.apiKey = apiKey || process.env.GEMINI_API_KEY || "";
-    this.model = model || process.env.GEMINI_MODEL || "gemini-2.0-flash";
+
+    let targetModel = (model || process.env.GEMINI_MODEL || "gemini-3.8-flash")
+      .trim()
+      .replace(/^models\//, "");
+
+    // Proactively normalize retired/deprecated models to active standard
+    const retiredModels = [
+      "gemini-2.5-flash",
+      "gemini-2.0-flash",
+      "gemini-2.0-flash-exp",
+      "gemini-1.5-flash",
+      "gemini-1.5-flash-latest",
+      "gemini-1.5-pro",
+    ];
+
+    if (retiredModels.includes(targetModel)) {
+      targetModel = "gemini-3.8-flash";
+    }
+
+    this.model = targetModel;
 
     if (!this.apiKey) {
       throw new Error(
@@ -50,7 +69,7 @@ export class GeminiProvider implements LLMProvider {
     mimeType = "image/jpeg",
     pageNo = 1
   ): Promise<PageExtractionResult> {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${this.apiKey}`;
+    let url = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${this.apiKey}`;
 
     const promptText = `
 You are a precise clinical document transcription and entity extraction engine.
@@ -175,6 +194,31 @@ CRITICAL RULES:
         if (response.status === 429) {
           const errText = await response.text();
           let errMsg = `Gemini API request failed with status 429 (Quota Exceeded)`;
+          try {
+            const parsed = JSON.parse(errText);
+            if (parsed.error?.message) errMsg += `: ${parsed.error.message}`;
+          } catch {
+            errMsg += `: ${errText}`;
+          }
+          throw new Error(errMsg);
+        }
+
+        // Auto-recover from retired / unavailable Gemini models (e.g. 404 "no longer available")
+        if (response.status === 404) {
+          const errText = await response.text();
+          if (
+            (errText.includes("no longer available") || errText.includes("not found")) &&
+            this.model !== "gemini-3.8-flash"
+          ) {
+            console.warn(
+              `[GeminiProvider] Model '${this.model}' is unavailable/retired. Automatically falling back to 'gemini-3.8-flash'...`
+            );
+            this.model = "gemini-3.8-flash";
+            url = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${this.apiKey}`;
+            continue;
+          }
+
+          let errMsg = `Gemini API request failed with status 404`;
           try {
             const parsed = JSON.parse(errText);
             if (parsed.error?.message) errMsg += `: ${parsed.error.message}`;
