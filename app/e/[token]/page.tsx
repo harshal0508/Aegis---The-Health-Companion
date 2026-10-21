@@ -1,4 +1,5 @@
 import React from "react";
+import Link from "next/link";
 import { headers } from "next/headers";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -276,6 +277,14 @@ export default async function EmergencyCardPage({
             This emergency card contains only records explicitly confirmed by the patient.
             For direct medical treatment, verify identity and clinical status independently.
           </p>
+          <div className="pt-0.5">
+            <Link
+              href="/about"
+              className="text-[11px] text-teal-700 hover:text-teal-800 hover:underline font-semibold"
+            >
+              What this app is &amp; isn&apos;t (Clinical Scope)
+            </Link>
+          </div>
           <p className="text-[11px] text-gray-400 font-mono">
             Powered by MedRecord Emergency Access • Secure 128-bit Token
           </p>

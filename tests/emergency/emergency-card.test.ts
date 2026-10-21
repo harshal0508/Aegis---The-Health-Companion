@@ -45,6 +45,10 @@ vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(async () => mockSupabaseInstance),
 }));
 
+vi.mock("@/lib/supabase/service-role", () => ({
+  createServiceRoleClient: vi.fn(() => mockSupabaseInstance),
+}));
+
 import { getEmergencyResponderData } from "@/lib/emergency/responder";
 import EmergencyCardPage from "@/app/e/[token]/page";
 import { notFound } from "next/navigation";
@@ -558,7 +562,14 @@ describe("Phase 5: Emergency Card System", () => {
       expect(pageResult).toBeDefined();
       expect(pageResult.type).toBe("main");
 
-      const stringifiedTree = JSON.stringify(pageResult);
+      const seen = new WeakSet();
+      const stringifiedTree = JSON.stringify(pageResult, (_key, value) => {
+        if (typeof value === "object" && value !== null) {
+          if (seen.has(value)) return undefined;
+          seen.add(value);
+        }
+        return value;
+      });
       // Confirmed patient name rendered
       expect(stringifiedTree).toContain("Vikram Malhotra");
       // Explicit unshared category banner rendered because allergy was toggled off
@@ -568,6 +579,86 @@ describe("Phase 5: Emergency Card System", () => {
       // Confirms zero internal IDs leaked anywhere in React tree props
       expect(stringifiedTree).not.toContain("user-uuid-999");
       expect(stringifiedTree).not.toContain("card-uuid-1");
+    });
+  });
+
+  // ── 7. Client Boundaries & Zero-Cookie Isolation Guards ─────────────────────
+  describe("Security Boundaries & Cookie Isolation", () => {
+    it("guarantees createServiceRoleClient does not import or use visitor cookies", async () => {
+      const fs = await import("fs");
+      const path = await import("path");
+
+      const serviceRoleSrc = fs.readFileSync(
+        path.resolve(process.cwd(), "lib/supabase/service-role.ts"),
+        "utf8"
+      );
+      const responderSrc = fs.readFileSync(
+        path.resolve(process.cwd(), "lib/emergency/responder.ts"),
+        "utf8"
+      );
+
+      // Must import 'server-only'
+      expect(serviceRoleSrc).toContain('import "server-only"');
+
+      // Neither file may import next/headers or invoke cookies()
+      expect(serviceRoleSrc).not.toMatch(/from\s+["']next\/headers["']/);
+      expect(responderSrc).not.toMatch(/from\s+["']next\/headers["']/);
+      expect(serviceRoleSrc).not.toMatch(/\bcookies\s*\(/);
+      expect(responderSrc).not.toMatch(/\bcookies\s*\(/);
+    });
+
+    it("verifies user-scoped createClient takes no arguments (cannot pass serviceRole=true)", async () => {
+      const fs = await import("fs");
+      const path = await import("path");
+
+      const serverClientSrc = fs.readFileSync(
+        path.resolve(process.cwd(), "lib/supabase/server.ts"),
+        "utf8"
+      );
+
+      // Must strictly be parameter-less
+      expect(serverClientSrc).toContain("export async function createClient()");
+      expect(serverClientSrc).not.toContain("serviceRole = false");
+    });
+
+    it("ensures no logged-in routes or client components import createServiceRoleClient", async () => {
+      const fs = await import("fs");
+      const path = await import("path");
+
+      function getFiles(dir: string, fileList: string[] = []): string[] {
+        if (!fs.existsSync(dir)) return fileList;
+        const entries = fs.readdirSync(dir, { withFileTypes: true });
+        for (const entry of entries) {
+          const fullPath = path.join(dir, entry.name);
+          if (entry.isDirectory()) {
+            if (!entry.name.startsWith(".")) getFiles(fullPath, fileList);
+          } else if (/\.(ts|tsx)$/.test(entry.name) && !entry.name.endsWith(".test.ts")) {
+            fileList.push(fullPath);
+          }
+        }
+        return fileList;
+      }
+
+      const clientDirs = [
+        path.resolve(process.cwd(), "app/(app)"),
+        path.resolve(process.cwd(), "app/(auth)"),
+        path.resolve(process.cwd(), "components"),
+      ];
+
+      for (const dir of clientDirs) {
+        const files = getFiles(dir);
+        for (const file of files) {
+          const content = fs.readFileSync(file, "utf8");
+          expect(
+            content,
+            `File ${file} must NOT import createServiceRoleClient or reference SUPABASE_SERVICE_ROLE_KEY`
+          ).not.toContain("createServiceRoleClient");
+          expect(
+            content,
+            `File ${file} must NOT reference SUPABASE_SERVICE_ROLE_KEY`
+          ).not.toContain("SUPABASE_SERVICE_ROLE_KEY");
+        }
+      }
     });
   });
 });

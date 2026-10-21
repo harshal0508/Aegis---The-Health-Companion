@@ -7,7 +7,7 @@ import {
   type RawDbItem,
   type PageDocMeta,
 } from "@/lib/emergency/sanitizer";
-import { createClient } from "@/lib/supabase/server";
+import { createServiceRoleClient } from "@/lib/supabase/service-role";
 
 export interface EmergencyRouteResult {
   rateLimited?: boolean;
@@ -40,7 +40,7 @@ export async function getEmergencyResponderData(
   // 3. Service Role lookup of emergency card by SHA-256 token hash
   // Service role is necessary because responder has no session/login
   const tokenHash = hashEmergencyToken(token);
-  const supabase = overrideSupabase || (await createClient(true));
+  const supabase = overrideSupabase || createServiceRoleClient();
 
   const { data: card, error: cardErr } = await supabase
     .from("emergency_cards")

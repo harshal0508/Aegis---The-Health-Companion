@@ -1,16 +1,16 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
-// Server-side Supabase client for use in Server Components and Route Handlers.
-// Uses the anon key by default so RLS is still enforced.
-// Pass serviceRole=true ONLY for admin operations that must bypass RLS.
-export async function createClient(serviceRole = false) {
+/**
+ * User-scoped Supabase client for Server Components, Server Actions, and Route Handlers.
+ * Enforces RLS using the public anon key and the user's active session cookie.
+ * Does NOT accept a serviceRole parameter — preventing accidental privilege escalation.
+ */
+export async function createClient() {
   const cookieStore = await cookies();
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
-  const key = serviceRole
-    ? (process.env.SUPABASE_SERVICE_ROLE_KEY || "placeholder-service-key")
-    : (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder-anon-key");
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder-anon-key";
 
   return createServerClient(url, key, {
     cookies: {
@@ -24,7 +24,7 @@ export async function createClient(serviceRole = false) {
           );
         } catch {
           // setAll is called from a Server Component where cookies are read-only.
-          // Safe to ignore — the middleware handles session refresh instead.
+          // Safe to ignore — middleware handles session refresh instead.
         }
       },
     },

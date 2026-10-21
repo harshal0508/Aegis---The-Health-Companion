@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { SignOutButton } from "@/components/auth/SignOutButton";
@@ -70,6 +71,18 @@ export default async function ProfilePage() {
             label="Phone"
             value={profile.emergency_contact_phone ?? "Not provided"}
           />
+        </CardContent>
+      </Card>
+
+      <Card className="hover:border-teal-300 transition-colors">
+        <CardContent className="p-4">
+          <Link
+            href="/about"
+            className="flex items-center justify-between text-sm font-semibold text-teal-800 hover:text-teal-900"
+          >
+            <span>What this app is &amp; isn&apos;t (Clinical Scope)</span>
+            <span className="text-gray-400 font-normal">→</span>
+          </Link>
         </CardContent>
       </Card>
 
