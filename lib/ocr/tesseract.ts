@@ -65,7 +65,12 @@ async function getWorker(): Promise<Worker> {
   if (workerInstance) return workerInstance;
   if (!workerPromise) {
     workerPromise = (async () => {
-      const worker = await createWorker("eng");
+      const localLangPath = path.join(process.cwd(), "eng.traineddata");
+      const options: any = {};
+      if (fs.existsSync(localLangPath)) {
+        options.langPath = process.cwd();
+      }
+      const worker = await createWorker("eng", 1, options);
       workerInstance = worker;
       return worker;
     })();

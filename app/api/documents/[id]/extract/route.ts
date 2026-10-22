@@ -166,21 +166,15 @@ export async function POST(
       const imageBuffer = Buffer.from(arrayBuffer);
       const mimeType = activeBlob.type || (ext === "pdf" ? "application/pdf" : "image/jpeg");
 
-      // 1. Extract entities via Vision LLM (Primary perception)
-      const extractionResult = await provider.extractPage(
-        base64,
-        mimeType,
-        page.page_no
-      );
-
-      // 2. Run independent Second-Reader OCR (Tesseract.js)
-      let secondaryOcrResult: TesseractResult | null = null;
-      try {
-        secondaryOcrResult = await ocrPage(imageBuffer);
-      } catch (ocrErr: any) {
-        // Non-blocking: If secondary reader fails, keep primary extraction
-        console.warn("[ExtractRoute] Second-reader OCR notice:", ocrErr.message);
-      }
+      // Run Primary Vision Perception (Gemini) and Secondary OCR (Tesseract) in parallel
+      const [extractionResult, secondaryOcrResult] = await Promise.all([
+        provider.extractPage(base64, mimeType, page.page_no),
+        ocrPage(imageBuffer).catch((ocrErr: any) => {
+          // Non-blocking: If secondary reader fails or times out, proceed with primary extraction
+          console.warn("[ExtractRoute] Second-reader OCR notice:", ocrErr.message);
+          return null;
+        }),
+      ]);
 
       if (secondaryOcrResult) {
         // Update bounding boxes for all existing items on this page (even if confirmed or omitted by Gemini)

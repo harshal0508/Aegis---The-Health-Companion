@@ -130,7 +130,7 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
     try {
       const res = await fetch(`/api/documents/${documentId}/extract`, {
         method: "POST",
-        signal: AbortSignal.timeout(45000), // 45s client timeout so UI never hangs indefinitely
+        signal: AbortSignal.timeout(90000), // 90s client timeout so UI never hangs indefinitely
       });
       const data = await res.json();
       if (!res.ok) {
