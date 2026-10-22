@@ -45,6 +45,7 @@ export interface TesseractResult {
 export interface OcrOptions {
   useCache?: boolean;
   cacheDir?: string; // STRICT PRIVACY: Only supplied during evaluation benchmarks; omitted in production for memory-only operation
+  timeoutMs?: number; // Maximum time in milliseconds before OCR gracefully aborts (default: 15000ms)
 }
 
 /**
@@ -126,6 +127,22 @@ export async function preprocessImage(imageBuffer: Buffer): Promise<{
  * - In evaluation benchmarks: options.cacheDir is provided to avoid re-running on known test files.
  */
 export async function ocrPage(
+  imageBuffer: Buffer,
+  options: OcrOptions = { useCache: true }
+): Promise<TesseractResult> {
+  const timeoutMs = options.timeoutMs ?? 15000;
+  return Promise.race([
+    runOcrPage(imageBuffer, options),
+    new Promise<TesseractResult>((_, reject) =>
+      setTimeout(
+        () => reject(new Error(`Tesseract second-reader OCR timed out after ${timeoutMs}ms`)),
+        timeoutMs
+      )
+    ),
+  ]);
+}
+
+async function runOcrPage(
   imageBuffer: Buffer,
   options: OcrOptions = { useCache: true }
 ): Promise<TesseractResult> {

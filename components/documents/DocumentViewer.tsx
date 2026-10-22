@@ -130,6 +130,7 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
     try {
       const res = await fetch(`/api/documents/${documentId}/extract`, {
         method: "POST",
+        signal: AbortSignal.timeout(45000), // 45s client timeout so UI never hangs indefinitely
       });
       const data = await res.json();
       if (!res.ok) {
@@ -144,7 +145,11 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
         }
       }
     } catch (err: any) {
-      setExtractError(err.message || "Extraction failed");
+      if (err.name === "TimeoutError" || err.name === "AbortError") {
+        setExtractError("Extraction timed out. The server or AI model took longer than expected. Please try again.");
+      } else {
+        setExtractError(err.message || "Extraction failed");
+      }
     } finally {
       setExtracting(false);
     }
