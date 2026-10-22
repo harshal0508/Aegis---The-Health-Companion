@@ -90,12 +90,15 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
   const [activeBoxes, setActiveBoxes] = useState<Array<{ x: number; y: number; w: number; h: number }> | null>(null);
   const [boxNotFound, setBoxNotFound] = useState<boolean>(false);
   const [extracting, setExtracting] = useState<boolean>(false);
+  const [extractError, setExtractError] = useState<string | null>(null);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [showOcrText, setShowOcrText] = useState<boolean>(false);
 
   const loadDocument = useCallback(async () => {
     try {
-      const res = await fetch(`/api/documents/${documentId}`);
+      const res = await fetch(`/api/documents/${documentId}?t=${Date.now()}`, {
+        cache: "no-store",
+      });
       const data = await res.json();
 
       if (!res.ok) {
@@ -105,8 +108,10 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
       setDocument(data.document);
       setPages(data.pages || []);
       setItems(data.items || []);
+      return data;
     } catch (err: any) {
       setError(err.message || "Failed to load document");
+      return null;
     }
   }, [documentId]);
 
@@ -121,6 +126,7 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
 
   const handleExtract = async () => {
     setExtracting(true);
+    setExtractError(null);
     try {
       const res = await fetch(`/api/documents/${documentId}/extract`, {
         method: "POST",
@@ -129,9 +135,16 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
       if (!res.ok) {
         throw new Error(data.error || "Extraction failed");
       }
-      await loadDocument();
+      const reloadedData = await loadDocument();
+      if (reloadedData?.items && activeItemId) {
+        const found = reloadedData.items.find((i: ItemData) => i.id === activeItemId);
+        if (found?.ocr_check?.bounding_boxes && found.ocr_check.bounding_boxes.length > 0) {
+          setActiveBoxes(found.ocr_check.bounding_boxes);
+          setBoxNotFound(false);
+        }
+      }
     } catch (err: any) {
-      alert(`Extraction failed: ${err.message}`);
+      setExtractError(err.message || "Extraction failed");
     } finally {
       setExtracting(false);
     }
@@ -570,6 +583,13 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
                     )}
                   </Button>
                 </div>
+
+                {extractError && (
+                  <div className="text-xs text-rose-800 bg-rose-50 border border-rose-200 rounded-lg p-3 space-y-1">
+                    <p className="font-semibold text-rose-900">Extraction Issue:</p>
+                    <p>{extractError}</p>
+                  </div>
+                )}
 
                 {items.map((item) => (
                   <div

@@ -7,9 +7,11 @@ import { crossCheckItem } from "@/lib/extraction/crosscheck";
 import { locateQuoteBoundingBoxes } from "@/lib/extraction/locator";
 
 // Daily extraction page cap per user (configurable via DAILY_PAGE_CAP).
-// NOTE: Google API free tier is strictly for development and testing (some models cap the entire project at 20 req/day).
-// For multi-user production, a commercial/paid plan with per-account quotas is required.
-const DAILY_PAGE_CAP = parseInt(process.env.DAILY_PAGE_CAP || "10", 10);
+// In development, default to generous cap (500 pages) so testing is never blocked.
+const DAILY_PAGE_CAP =
+  process.env.NODE_ENV !== "production"
+    ? 500
+    : parseInt(process.env.DAILY_PAGE_CAP || "50", 10);
 
 export async function POST(
   request: Request,
@@ -189,19 +191,17 @@ export async function POST(
         for (const existingItem of itemsToUpdate) {
           if (existingItem.quote) {
             const boxes = locateQuoteBoundingBoxes(existingItem.quote, secondaryOcrResult);
-            if (boxes && boxes.length > 0) {
-              const currentPayload = (existingItem.ocr_check as any) || { state: "agree" };
-              await supabase
-                .from("items")
-                .update({
-                  page_id: page.id,
-                  ocr_check: {
-                    ...currentPayload,
-                    bounding_boxes: boxes,
-                  },
-                })
-                .eq("id", existingItem.id);
-            }
+            const currentPayload = (existingItem.ocr_check as any) || { state: "agree" };
+            await supabase
+              .from("items")
+              .update({
+                page_id: page.id,
+                ocr_check: {
+                  ...currentPayload,
+                  bounding_boxes: boxes || null,
+                },
+              })
+              .eq("id", existingItem.id);
           }
         }
       }

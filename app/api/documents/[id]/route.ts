@@ -88,11 +88,18 @@ export async function GET(
       })
     );
 
-    return NextResponse.json({
-      document,
-      pages: pagesWithUrls,
-      items: documentItems,
-    });
+    return NextResponse.json(
+      {
+        document,
+        pages: pagesWithUrls,
+        items: documentItems,
+      },
+      {
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate",
+        },
+      }
+    );
   } catch (err: any) {
     return NextResponse.json(
       { error: err?.message || "Internal server error" },
