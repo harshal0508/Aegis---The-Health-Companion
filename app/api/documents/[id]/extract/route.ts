@@ -2,6 +2,8 @@ import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { getProvider } from "@/lib/llm/provider";
 import { verifyQuotesAgainstOcr, deduplicateExtractedItems } from "@/lib/extraction/verify";
+import { ocrPage, type TesseractResult } from "@/lib/ocr/tesseract";
+import { crossCheckItem } from "@/lib/extraction/crosscheck";
 
 // Daily extraction page cap per user (configurable via DAILY_PAGE_CAP).
 // NOTE: Google API free tier is strictly for development and testing (some models cap the entire project at 20 req/day).
@@ -131,14 +133,24 @@ export async function POST(
 
       const arrayBuffer = await activeBlob.arrayBuffer();
       const base64 = Buffer.from(arrayBuffer).toString("base64");
+      const imageBuffer = Buffer.from(arrayBuffer);
       const mimeType = activeBlob.type || (ext === "pdf" ? "application/pdf" : "image/jpeg");
 
-      // Extract entities via Vision LLM
+      // 1. Extract entities via Vision LLM (Primary perception)
       const extractionResult = await provider.extractPage(
         base64,
         mimeType,
         page.page_no
       );
+
+      // 2. Run independent Second-Reader OCR (Tesseract.js)
+      let secondaryOcrResult: TesseractResult | null = null;
+      try {
+        secondaryOcrResult = await ocrPage(imageBuffer);
+      } catch (ocrErr: any) {
+        // Non-blocking: If secondary reader fails, keep primary extraction
+        console.warn("[ExtractRoute] Second-reader OCR notice:", ocrErr.message);
+      }
 
       // Rule 4: Extract document date when present (distinguishing discharge vs signed date)
       if (!detectedDocDate && extractionResult.doc_date) {
@@ -146,43 +158,86 @@ export async function POST(
         detectedDocDateType = extractionResult.doc_date_type || "unspecified";
       }
 
-      // Rule 1: Quote Verification Gate
+      // Rule 1: Quote Verification Gate (verifies quote appears in primary transcript)
       const verification = verifyQuotesAgainstOcr(
         extractionResult.items,
         extractionResult.ocr_text
       );
 
-      // Save OCR text to page
-      await supabase
-        .from("pages")
-        .update({ ocr_text: extractionResult.ocr_text })
-        .eq("id", page.id);
+      // Save OCR texts to page
+      const pageUpdateData: Record<string, any> = {
+        ocr_text: extractionResult.ocr_text,
+      };
+      if (secondaryOcrResult?.text) {
+        pageUpdateData.ocr_text_secondary = secondaryOcrResult.text;
+      }
+
+      try {
+        await supabase
+          .from("pages")
+          .update(pageUpdateData)
+          .eq("id", page.id);
+      } catch {
+        // Fallback if ocr_text_secondary column migration is pending
+        delete pageUpdateData.ocr_text_secondary;
+        await supabase
+          .from("pages")
+          .update(pageUpdateData)
+          .eq("id", page.id);
+      }
 
       // Insert verified / needs_review items into database (deduplicated by category + normalized value)
       const deduplicatedItems = deduplicateExtractedItems(verification.items);
 
       if (deduplicatedItems.length > 0) {
-        const rowsToInsert = deduplicatedItems.map((item) => ({
-          user_id: user.id,
-          page_id: page.id,
-          category: item.category,
-          value: item.value,
-          quote: item.quote,
-          confidence: item.confidence,
-          source: "extracted" as const,
-          // Rule 1 & 2: status is 'extracted' (if quote verified) or 'needs_review' (if quote unverified)
-          status: item.status,
-          normalization_source: item.normalization_source || "none",
-        }));
+        const rowsToInsert = deduplicatedItems.map((item) => {
+          let itemStatus: "extracted" | "needs_review" = item.status;
+          let ocrCheckPayload: any = null;
+          let reviewReason: string | null = null;
+
+          // 3. Second-Reader Cross-Check Gate
+          if (secondaryOcrResult) {
+            const check = crossCheckItem(item, secondaryOcrResult);
+            ocrCheckPayload = check.ocrCheckPayload;
+
+            if (check.state === "disagree") {
+              // Mark needs_review with specific token disagreement reason; never delete the item
+              itemStatus = "needs_review";
+              reviewReason = check.reviewReason || "OCR disagreement";
+            }
+          }
+
+          return {
+            user_id: user.id,
+            page_id: page.id,
+            category: item.category,
+            value: item.value,
+            quote: item.quote,
+            confidence: item.confidence,
+            source: "extracted" as const,
+            // Rule 1 & 2: status is 'extracted' (if verified) or 'needs_review' (if quote unverified or OCR disagrees)
+            status: itemStatus,
+            normalization_source: item.normalization_source || "none",
+            ocr_check: ocrCheckPayload,
+            review_reason: reviewReason,
+          };
+        });
 
         const { error: insertErr } = await supabase
           .from("items")
           .insert(rowsToInsert);
 
-        if (!insertErr) {
-          totalItemsCreated += rowsToInsert.length;
-          verifiedItemsCount += deduplicatedItems.filter((i) => i.verified).length;
+        if (insertErr) {
+          // Fallback if ocr_check / review_reason columns are not yet applied in remote Supabase
+          const strippedRows = rowsToInsert.map((r) => {
+            const { ocr_check, review_reason, ...rest } = r;
+            return rest;
+          });
+          await supabase.from("items").insert(strippedRows);
         }
+
+        totalItemsCreated += rowsToInsert.length;
+        verifiedItemsCount += deduplicatedItems.filter((i) => i.verified).length;
       }
     }
 

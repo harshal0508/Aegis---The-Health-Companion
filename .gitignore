@@ -37,3 +37,6 @@ coverage/
 # PWA service worker (generated at build time)
 public/sw.js
 public/workbox-*.js
+
+# OCR traineddata files
+*.traineddata

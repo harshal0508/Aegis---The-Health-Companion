@@ -54,6 +54,14 @@ export interface SummaryItem {
   document?: ItemDocument | null;
   created_at: string;
   last_confirmed_at?: string | null;
+  ocr_check?: {
+    state: "agree" | "disagree" | "unavailable";
+    page_confidence?: number;
+    matched_tokens?: string[];
+    missing_tokens?: string[];
+    review_reason?: string;
+  } | null;
+  review_reason?: string | null;
 }
 
 const CATEGORY_CONFIG: Record<
@@ -472,6 +480,20 @@ export function HealthSummaryView() {
                                   Added by you, no document
                                 </Badge>
                               )}
+
+                              {/* Second-Reader OCR Cross-Check Badges */}
+                              {(item.ocr_check?.state === "disagree" || (item.review_reason && item.review_reason.includes("OCR"))) && (
+                                <Badge className="bg-rose-100 text-rose-800 border-rose-200 text-[10px] px-2 py-0.5 font-medium">
+                                  <AlertTriangle className="h-3 w-3 mr-1 text-rose-600 inline" />
+                                  Second reading disagrees: {item.review_reason ? item.review_reason.replace(/^OCR disagreement:\s*/i, "") : "dose"}
+                                </Badge>
+                              )}
+
+                              {item.ocr_check?.state === "unavailable" && (
+                                <Badge variant="secondary" className="bg-slate-100 text-slate-700 border-slate-200 text-[10px] px-2 py-0.5">
+                                  Second reading unavailable
+                                </Badge>
+                              )}
                             </div>
 
                             {/* Main Display Value / Inline Edit */}
@@ -568,24 +590,38 @@ export function HealthSummaryView() {
 
                             {/* Confirm Action Bar adjacent to Quote & Document Link */}
                             {item.status !== "confirmed" && !isEditing && (
-                              <div className="mt-3 pt-2.5 border-t border-amber-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-amber-50/40 p-2.5 rounded-lg border border-amber-200/60">
-                                <div className="text-[11px] text-amber-900 flex items-center gap-1.5">
-                                  <Info className="h-3.5 w-3.5 text-amber-600 flex-shrink-0" />
-                                  <span>Compare quote against {item.page_no ? `Page ${item.page_no}` : "your scan"} before confirming.</span>
+                              <div className="mt-3 space-y-2">
+                                {item.review_reason && (
+                                  <div className="bg-rose-50 border border-rose-200 rounded-lg p-2.5 text-xs text-rose-900 space-y-1">
+                                    <div className="flex items-center gap-1.5 font-semibold text-rose-800">
+                                      <AlertTriangle className="h-3.5 w-3.5 text-rose-600 flex-shrink-0" />
+                                      <span>Second Reader Flag: {item.review_reason}</span>
+                                    </div>
+                                    <p className="text-[11px] text-rose-700 leading-normal">
+                                      Tesseract OCR and Gemini found conflicting text on this page. Carefully inspect your document scan before confirming.
+                                    </p>
+                                  </div>
+                                )}
+
+                                <div className="pt-2.5 border-t border-amber-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-amber-50/40 p-2.5 rounded-lg border border-amber-200/60">
+                                  <div className="text-[11px] text-amber-900 flex items-center gap-1.5">
+                                    <Info className="h-3.5 w-3.5 text-amber-600 flex-shrink-0" />
+                                    <span>Compare quote against {item.page_no ? `Page ${item.page_no}` : "your scan"} before confirming.</span>
+                                  </div>
+                                  <Button
+                                    size="sm"
+                                    disabled={confirmingId === item.id}
+                                    onClick={() => handleConfirm(item.id)}
+                                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-8 px-3 font-medium shadow-sm flex-shrink-0"
+                                  >
+                                    {confirmingId === item.id ? (
+                                      <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                                    ) : (
+                                      <Check className="h-3.5 w-3.5 mr-1.5" />
+                                    )}
+                                    I checked this against my document
+                                  </Button>
                                 </div>
-                                <Button
-                                  size="sm"
-                                  disabled={confirmingId === item.id}
-                                  onClick={() => handleConfirm(item.id)}
-                                  className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-8 px-3 font-medium shadow-sm flex-shrink-0"
-                                >
-                                  {confirmingId === item.id ? (
-                                    <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
-                                  ) : (
-                                    <Check className="h-3.5 w-3.5 mr-1.5" />
-                                  )}
-                                  I checked this against my document
-                                </Button>
                               </div>
                             )}
                           </div>

@@ -56,6 +56,12 @@ interface ItemData {
   status: string;
   source: string;
   page_id: string | null;
+  ocr_check?: {
+    state: "agree" | "disagree" | "unavailable";
+    page_confidence?: number;
+    review_reason?: string;
+  } | null;
+  review_reason?: string | null;
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -551,9 +557,31 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
                           Extracted
                         </Badge>
                       )}
+
+                      {/* Second-Reader Badges */}
+                      {(item.ocr_check?.state === "disagree" || (item.review_reason && item.review_reason.includes("OCR"))) && (
+                        <Badge className="bg-rose-100 text-rose-800 border-rose-200 text-[9px] px-1.5 py-0">
+                          OCR Disagrees: {item.review_reason ? item.review_reason.replace(/^OCR disagreement:\s*/i, "") : "dose"}
+                        </Badge>
+                      )}
+
+                      {item.ocr_check?.state === "unavailable" && (
+                        <Badge variant="secondary" className="bg-slate-100 text-slate-700 border-slate-200 text-[9px] px-1.5 py-0">
+                          Second reader unavailable
+                        </Badge>
+                      )}
                     </div>
 
                     <p className="font-medium text-gray-900 leading-snug">{item.value}</p>
+
+                    {item.review_reason && (
+                      <div className="mt-1.5 text-xs text-rose-800 bg-rose-50 rounded p-2 border border-rose-200">
+                        <span className="font-semibold block text-[10px] uppercase tracking-wider text-rose-900 mb-0.5">
+                          Second Reader Flag:
+                        </span>
+                        <p>{item.review_reason}</p>
+                      </div>
+                    )}
 
                     {item.quote && (
                       <div className="mt-2 text-xs text-gray-600 bg-gray-50/80 rounded p-2 border-l-2 border-teal-500">

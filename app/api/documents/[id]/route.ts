@@ -51,7 +51,7 @@ export async function GET(
     // 4. Fetch associated items
     const { data: items } = await supabase
       .from("items")
-      .select("id, category, value, quote, confidence, status, source, page_id")
+      .select("id, category, value, quote, confidence, status, source, page_id, ocr_check, review_reason")
       .eq("user_id", user.id);
 
     // Filter items related to this document's pages
