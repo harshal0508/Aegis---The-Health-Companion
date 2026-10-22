@@ -150,6 +150,20 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
     }
   };
 
+  // Re-sync active highlight boxes whenever document items update (e.g. after re-running extraction)
+  useEffect(() => {
+    if (activeItemId && items.length > 0) {
+      const active = items.find((i) => i.id === activeItemId);
+      if (active) {
+        const boxes = active.ocr_check?.bounding_boxes;
+        if (boxes && boxes.length > 0) {
+          setActiveBoxes(boxes);
+          setBoxNotFound(false);
+        }
+      }
+    }
+  }, [items, activeItemId]);
+
   const handleConfirmItem = async (itemId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     setConfirmingId(itemId);

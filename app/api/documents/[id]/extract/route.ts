@@ -4,6 +4,7 @@ import { getProvider } from "@/lib/llm/provider";
 import { verifyQuotesAgainstOcr, deduplicateExtractedItems } from "@/lib/extraction/verify";
 import { ocrPage, type TesseractResult } from "@/lib/ocr/tesseract";
 import { crossCheckItem } from "@/lib/extraction/crosscheck";
+import { locateQuoteBoundingBoxes } from "@/lib/extraction/locator";
 
 // Daily extraction page cap per user (configurable via DAILY_PAGE_CAP).
 // NOTE: Google API free tier is strictly for development and testing (some models cap the entire project at 20 req/day).
@@ -113,6 +114,13 @@ export async function POST(
       .eq("source", "extracted")
       .neq("status", "confirmed");
 
+    // Fetch all existing items for this document's pages to update bounding boxes
+    const { data: existingDocItems } = await supabase
+      .from("items")
+      .select("id, category, value, quote, page_id, ocr_check")
+      .eq("user_id", user.id)
+      .in("page_id", pageIds);
+
     // Check existing confirmed items to avoid duplicating already-confirmed patient records
     const { data: existingConfirmed } = await supabase
       .from("items")
@@ -170,6 +178,32 @@ export async function POST(
       } catch (ocrErr: any) {
         // Non-blocking: If secondary reader fails, keep primary extraction
         console.warn("[ExtractRoute] Second-reader OCR notice:", ocrErr.message);
+      }
+
+      if (secondaryOcrResult) {
+        // Update bounding boxes for all existing items on this page (even if confirmed or omitted by Gemini)
+        const itemsToUpdate = (existingDocItems || []).filter(
+          (item) => item.page_id === page.id || (!item.page_id && item.quote)
+        );
+
+        for (const existingItem of itemsToUpdate) {
+          if (existingItem.quote) {
+            const boxes = locateQuoteBoundingBoxes(existingItem.quote, secondaryOcrResult);
+            if (boxes && boxes.length > 0) {
+              const currentPayload = (existingItem.ocr_check as any) || { state: "agree" };
+              await supabase
+                .from("items")
+                .update({
+                  page_id: page.id,
+                  ocr_check: {
+                    ...currentPayload,
+                    bounding_boxes: boxes,
+                  },
+                })
+                .eq("id", existingItem.id);
+            }
+          }
+        }
       }
 
       // Rule 4: Extract document date when present (distinguishing discharge vs signed date)

@@ -1,17 +1,23 @@
 import { NormalizedBox, TesseractResult, OcrWord } from "@/lib/ocr/tesseract";
 import { levenshteinDistance } from "@/lib/extraction/crosscheck";
 
-function cleanWord(str: string): string {
-  return str.toLowerCase().replace(/[^\w]/g, "").trim();
+export function cleanWord(str: string): string {
+  return str
+    .toLowerCase()
+    .replace(/[1li|]/g, "1")
+    .replace(/[0o]/g, "0")
+    .replace(/[5s]/g, "5")
+    .replace(/[^\w]/g, "")
+    .trim();
 }
 
 /**
  * Checks if a candidate OCR word matches a target quote word:
  * - Numbers must match exactly.
- * - Words > 5 characters allow edit distance <= 1.
+ * - Words >= 4 characters allow edit distance <= 1 and OCR character confusions.
  * - Short words require exact match.
  */
-function wordMatches(target: string, candidate: string): boolean {
+export function wordMatches(target: string, candidate: string): boolean {
   const t = cleanWord(target);
   const c = cleanWord(candidate);
   if (!t || !c) return false;
@@ -23,7 +29,7 @@ function wordMatches(target: string, candidate: string): boolean {
 
   if (t === c) return true;
 
-  if (t.length > 5 && Math.abs(t.length - c.length) <= 1) {
+  if (t.length >= 4 && Math.abs(t.length - c.length) <= 1) {
     return levenshteinDistance(t, c) <= 1;
   }
 
@@ -89,6 +95,15 @@ export function locateQuoteBoundingBoxes(
         bestScore = score;
         bestMatchedSlice = ocrWords.slice(i, i + windowSize);
       }
+    }
+  }
+
+  // 3. Fallback: If quote contains parentheses (e.g. "Hemoglobin A1c (HbA1c)"), try matching base phrase
+  if (!bestMatchedSlice && quote.includes("(") && quote.includes(")")) {
+    const basePhrase = quote.replace(/\([^)]*\)/g, "").trim();
+    if (basePhrase.length >= 3) {
+      const baseResult = locateQuoteBoundingBoxes(basePhrase, tesseractResult);
+      if (baseResult) return baseResult;
     }
   }
 
