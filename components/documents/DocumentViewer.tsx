@@ -629,9 +629,13 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
                               <span className="text-[10px] text-teal-800 bg-teal-100/90 px-1.5 py-0.5 rounded font-medium border border-teal-200">
                                 ✓ Highlighted on scan
                               </span>
-                            ) : (
+                            ) : item.ocr_check && "bounding_boxes" in item.ocr_check ? (
                               <span className="text-[10px] text-amber-800 bg-amber-100/90 px-1.5 py-0.5 rounded font-medium border border-amber-200">
                                 ⓘ Location not found on page
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-teal-800 bg-teal-50 px-1.5 py-0.5 rounded font-medium border border-teal-200">
+                                ⓘ Click &quot;Re-run Extraction&quot; to highlight
                               </span>
                             )
                           )}

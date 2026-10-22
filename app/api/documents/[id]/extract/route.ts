@@ -116,13 +116,13 @@ export async function POST(
     // Check existing confirmed items to avoid duplicating already-confirmed patient records
     const { data: existingConfirmed } = await supabase
       .from("items")
-      .select("category, value")
+      .select("id, category, value")
       .eq("user_id", user.id)
       .eq("status", "confirmed");
 
-    const confirmedKeySet = new Set(
+    const confirmedMap = new Map<string, string>(
       (existingConfirmed || []).map(
-        (i) => `${i.category}:${i.value.toLowerCase().replace(/[^\w]/g, "")}`
+        (i) => [`${i.category}:${i.value.toLowerCase().replace(/[^\w]/g, "")}`, i.id]
       )
     );
 
@@ -243,9 +243,29 @@ export async function POST(
           };
         });
 
+        // Update existing confirmed items so they receive the newly computed OCR check and bounding boxes
+        for (const row of rowsToInsert) {
+          const key = `${row.category}:${row.value.toLowerCase().replace(/[^\w]/g, "")}`;
+          const confirmedId = confirmedMap.get(key);
+          if (confirmedId) {
+            try {
+              await supabase
+                .from("items")
+                .update({
+                  ocr_check: row.ocr_check,
+                  quote: row.quote,
+                  page_id: row.page_id,
+                })
+                .eq("id", confirmedId);
+            } catch {
+              // Silently ignore if column update fails
+            }
+          }
+        }
+
         const nonDuplicateRows = rowsToInsert.filter((r) => {
           const key = `${r.category}:${r.value.toLowerCase().replace(/[^\w]/g, "")}`;
-          return !confirmedKeySet.has(key);
+          return !confirmedMap.has(key);
         });
 
         if (nonDuplicateRows.length > 0) {
