@@ -1,4 +1,5 @@
-import { TesseractResult } from "@/lib/ocr/tesseract";
+import { TesseractResult, NormalizedBox } from "@/lib/ocr/tesseract";
+import { locateQuoteBoundingBoxes } from "@/lib/extraction/locator";
 
 export type OcrCrossCheckState = "agree" | "disagree" | "unavailable";
 
@@ -14,6 +15,7 @@ export interface OcrCheckPayload {
   matched_tokens: string[];
   missing_tokens: string[];
   review_reason?: string;
+  bounding_boxes?: NormalizedBox[] | null;
 }
 
 export interface CrossCheckResult {
@@ -23,6 +25,7 @@ export interface CrossCheckResult {
   matchedTokens: string[];
   missingTokens: string[];
   reviewReason?: string;
+  boundingBoxes?: NormalizedBox[] | null;
   ocrCheckPayload: OcrCheckPayload;
 }
 
@@ -74,7 +77,7 @@ export function levenshteinDistance(a: string, b: string): number {
 /**
  * Normalizes text: lowercase, punctuation removed.
  */
-function cleanText(text: string): string {
+export function cleanText(text: string): string {
   return text
     .toLowerCase()
     .replace(/[^\w\s.]/g, " ")
@@ -220,6 +223,69 @@ export function extractCriticalTokens(item: {
 }
 
 /**
+ * Position-Aware Dose Checking:
+ * Verifies that a dose number appears in the local spatial/line window of the drug name.
+ * Prevents false-positive agreement when a dose number exists elsewhere on the page
+ * next to a completely different drug.
+ */
+export function isDoseNearDrug(
+  doseNumber: string,
+  drugTokens: string[],
+  tesseractResult: TesseractResult
+): boolean {
+  const normDose = doseNumber.toLowerCase();
+
+  // 1. Line-Aware Check: Check lines containing the drug name
+  if (tesseractResult.lines && tesseractResult.lines.length > 0) {
+    let drugFoundInAnyLine = false;
+
+    for (const line of tesseractResult.lines) {
+      const cleanLine = cleanText(line.text);
+      const hasDrug = drugTokens.some((d) => cleanLine.includes(d));
+      if (hasDrug) {
+        drugFoundInAnyLine = true;
+        // Check if dose number appears as standalone number on this specific line
+        const numberRegex = new RegExp(`(?:^|[^0-9.])${normDose}(?:$|[^0-9.])`);
+        if (numberRegex.test(cleanLine)) {
+          return true;
+        }
+      }
+    }
+
+    // If drug was found on lines, but none of those lines contained this dose number:
+    if (drugFoundInAnyLine) {
+      return false;
+    }
+  }
+
+  // 2. Sliding Window Fallback: Check within +/- 8 words of any drug occurrence
+  const words = (tesseractResult.words || []).map((w) => cleanText(w.text));
+  const drugIndices: number[] = [];
+
+  for (let i = 0; i < words.length; i++) {
+    if (drugTokens.some((d) => words[i] === d || words[i].includes(d))) {
+      drugIndices.push(i);
+    }
+  }
+
+  if (drugIndices.length === 0) {
+    return false;
+  }
+
+  const numberRegex = new RegExp(`(?:^|[^0-9.])${normDose}(?:$|[^0-9.])`);
+  for (const idx of drugIndices) {
+    const start = Math.max(0, idx - 8);
+    const end = Math.min(words.length, idx + 8);
+    const windowText = words.slice(start, end).join(" ");
+    if (numberRegex.test(windowText)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
  * Checks if a specific critical token is supported by Tesseract OCR output.
  *
  * CRITICAL CLINICAL RULES:
@@ -297,9 +363,11 @@ export function isTokenInOcr(
 /**
  * Cross-checks an extracted clinical item against the independent Tesseract OCR reading.
  * Returns one of:
- * - "agree": all critical tokens verified in second reading
+ * - "agree": all critical tokens verified in second reading (with position-awareness for doses)
  * - "disagree": page confidence adequate, but critical token(s) absent (e.g. dose mismatch)
  * - "unavailable": page confidence below threshold (blur/messy scan); does NOT flag disagreement
+ *
+ * Also computes normalized bounding boxes (0-1) for UI highlighting.
  */
 export function crossCheckItem(
   item: {
@@ -312,6 +380,11 @@ export function crossCheckItem(
 ): CrossCheckResult {
   const confidenceThreshold = options.confidenceThreshold ?? 60;
   const pageConfidence = tesseractResult.pageConfidence;
+
+  // 1. Compute bounding boxes for the quote (if quote is present)
+  const boundingBoxes = item.quote
+    ? locateQuoteBoundingBoxes(item.quote, tesseractResult)
+    : null;
 
   const criticalTokens = extractCriticalTokens(item);
 
@@ -326,11 +399,13 @@ export function crossCheckItem(
       matchedTokens: [],
       missingTokens: [],
       reviewReason: undefined,
+      boundingBoxes,
       ocrCheckPayload: {
         state: "unavailable",
         page_confidence: pageConfidence,
         matched_tokens: [],
         missing_tokens: [],
+        bounding_boxes: boundingBoxes,
       },
     };
   }
@@ -343,11 +418,13 @@ export function crossCheckItem(
       criticalTokens: [],
       matchedTokens: [],
       missingTokens: [],
+      boundingBoxes,
       ocrCheckPayload: {
         state: "agree",
         page_confidence: pageConfidence,
         matched_tokens: [],
         missing_tokens: [],
+        bounding_boxes: boundingBoxes,
       },
     };
   }
@@ -358,7 +435,24 @@ export function crossCheckItem(
   const matchedTokens: string[] = [];
   const missingTokens: string[] = [];
 
+  // Extract drug name tokens for position-aware medication checking
+  const drugTokens = criticalTokens
+    .filter((t) => t.type === "drug_name")
+    .map((t) => t.token);
+
   for (const tokenObj of criticalTokens) {
+    // Position-Aware check for medication dose numbers:
+    // Must appear on the same line or in the immediate word window of the drug name!
+    if (tokenObj.type === "dose_number" && item.category === "medication" && drugTokens.length > 0) {
+      const near = isDoseNearDrug(tokenObj.token, drugTokens, tesseractResult);
+      if (near) {
+        matchedTokens.push(tokenObj.token);
+      } else {
+        missingTokens.push(tokenObj.token);
+      }
+      continue;
+    }
+
     if (isTokenInOcr(tokenObj, ocrWords, normalizedOcrText)) {
       matchedTokens.push(tokenObj.token);
     } else {
@@ -373,11 +467,13 @@ export function crossCheckItem(
       criticalTokens,
       matchedTokens,
       missingTokens: [],
+      boundingBoxes,
       ocrCheckPayload: {
         state: "agree",
         page_confidence: pageConfidence,
         matched_tokens: matchedTokens,
         missing_tokens: [],
+        bounding_boxes: boundingBoxes,
       },
     };
   }
@@ -391,12 +487,14 @@ export function crossCheckItem(
     matchedTokens,
     missingTokens,
     reviewReason: reason,
+    boundingBoxes,
     ocrCheckPayload: {
       state: "disagree",
       page_confidence: pageConfidence,
       matched_tokens: matchedTokens,
       missing_tokens: missingTokens,
       review_reason: reason,
+      bounding_boxes: boundingBoxes,
     },
   };
 }

@@ -88,8 +88,11 @@ Identify all distinct clinical entities belonging to these categories:
     - If NO date is printed anywhere on this page, store value as: "No known drug allergies, per document, date not found"
   * NEVER state global "no allergies".
   * If there is NO mention of allergies anywhere in the document, extract NOTHING for allergy (do NOT output "none", "nil", or "no allergies").
-- "surgery": Operations, procedures, interventions (e.g., "Intra-articular injection", "Appendectomy")
-- "lab": Laboratory test results, diagnostic investigations, vital signs
+- "surgery": Operations, surgical interventions, and invasive procedures (e.g., "Intra-articular injection", "Appendectomy", "Coronary bypass", "Stent placement").
+  * STRICT EXCLUSIONS: Do NOT classify non-invasive diagnostic examinations, clinical consults, routine eye checks, or administrative lines as surgery (e.g. NEVER extract "Diabetic Retinal Exam", "Room and Board - Semi-Private", "Eye exam", or "General Physical Exam" as surgery).
+- "lab": Laboratory test results and diagnostic investigations with findings:
+  * STRICT REQUIREMENT: Only extract lab tests and imaging if an ACTUAL RESULT, observation, or numeric value is stated (e.g., "HbA1c 7.4%", "Blood Glucose 140 mg/dL", "Chest X-Ray: Clear lungs").
+  * Do NOT extract bare test names that are merely listed as "ordered", "pending", or "requested" without any result values (e.g. do NOT extract "Hemoglobin A1c" or "Comprehensive Metabolic Panel" if listed only under tests ordered without results).
 - "implant": Medical devices, stents, implants, prosthetics
 
 TASK 3: DOCUMENT DATE EXTRACTION & AMBIGUITY RULES
@@ -272,7 +275,26 @@ CRITICAL RULES:
       throw new Error(`Failed to parse extraction JSON response: ${e.message}`);
     }
 
-    const items: ExtractedItem[] = (parsedResult.items || []).map((item) => ({
+    const nonSurgicalKeywords = [
+      "retinal exam",
+      "eye exam",
+      "room and board",
+      "physical exam",
+      "consultation",
+      "semi-private",
+      "fundoscopy",
+    ];
+
+    const filteredRawItems = (parsedResult.items || []).filter((item) => {
+      const valLower = (item.value || "").toLowerCase();
+      // Drop diagnostic exams or administrative items mislabeled as surgery
+      if (item.category === "surgery" && nonSurgicalKeywords.some((e) => valLower.includes(e))) {
+        return false;
+      }
+      return true;
+    });
+
+    const items: ExtractedItem[] = filteredRawItems.map((item) => ({
       category: item.category,
       value: item.value,
       page_no: pageNo,

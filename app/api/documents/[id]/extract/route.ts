@@ -102,12 +102,32 @@ export async function POST(
     let totalItemsCreated = 0;
     let verifiedItemsCount = 0;
 
+    const pageIds = pages.map((p) => p.id);
+
+    // Clean up previous unconfirmed extracted items for this document's pages to avoid duplicate entries on re-run
+    await supabase
+      .from("items")
+      .delete()
+      .eq("user_id", user.id)
+      .in("page_id", pageIds)
+      .eq("source", "extracted")
+      .neq("status", "confirmed");
+
+    // Check existing confirmed items to avoid duplicating already-confirmed patient records
+    const { data: existingConfirmed } = await supabase
+      .from("items")
+      .select("category, value")
+      .eq("user_id", user.id)
+      .eq("status", "confirmed");
+
+    const confirmedKeySet = new Set(
+      (existingConfirmed || []).map(
+        (i) => `${i.category}:${i.value.toLowerCase().replace(/[^\w]/g, "")}`
+      )
+    );
+
     // 7. Process each page
     for (const page of pages) {
-      // Caching: Skip page if OCR and extraction was already completed
-      if (page.ocr_text && page.ocr_text.trim().length > 0) {
-        continue;
-      }
 
       // Download page file from Supabase private storage
       const ext = document.storage_path.endsWith(".pdf") ? "pdf" : "jpg";
@@ -223,20 +243,27 @@ export async function POST(
           };
         });
 
-        const { error: insertErr } = await supabase
-          .from("items")
-          .insert(rowsToInsert);
+        const nonDuplicateRows = rowsToInsert.filter((r) => {
+          const key = `${r.category}:${r.value.toLowerCase().replace(/[^\w]/g, "")}`;
+          return !confirmedKeySet.has(key);
+        });
 
-        if (insertErr) {
-          // Fallback if ocr_check / review_reason columns are not yet applied in remote Supabase
-          const strippedRows = rowsToInsert.map((r) => {
-            const { ocr_check, review_reason, ...rest } = r;
-            return rest;
-          });
-          await supabase.from("items").insert(strippedRows);
+        if (nonDuplicateRows.length > 0) {
+          const { error: insertErr } = await supabase
+            .from("items")
+            .insert(nonDuplicateRows);
+
+          if (insertErr) {
+            // Fallback if ocr_check / review_reason columns are not yet applied in remote Supabase
+            const strippedRows = nonDuplicateRows.map((r) => {
+              const { ocr_check, review_reason, ...rest } = r;
+              return rest;
+            });
+            await supabase.from("items").insert(strippedRows);
+          }
+
+          totalItemsCreated += nonDuplicateRows.length;
         }
-
-        totalItemsCreated += rowsToInsert.length;
         verifiedItemsCount += deduplicatedItems.filter((i) => i.verified).length;
       }
     }

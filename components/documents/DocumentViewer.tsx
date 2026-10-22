@@ -60,6 +60,7 @@ interface ItemData {
     state: "agree" | "disagree" | "unavailable";
     page_confidence?: number;
     review_reason?: string;
+    bounding_boxes?: Array<{ x: number; y: number; w: number; h: number }> | null;
   } | null;
   review_reason?: string | null;
 }
@@ -85,6 +86,9 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<boolean>(false);
   const [activeItemQuote, setActiveItemQuote] = useState<string | null>(null);
+  const [activeItemId, setActiveItemId] = useState<string | null>(null);
+  const [activeBoxes, setActiveBoxes] = useState<Array<{ x: number; y: number; w: number; h: number }> | null>(null);
+  const [boxNotFound, setBoxNotFound] = useState<boolean>(false);
   const [extracting, setExtracting] = useState<boolean>(false);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [showOcrText, setShowOcrText] = useState<boolean>(false);
@@ -130,6 +134,19 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
       alert(`Extraction failed: ${err.message}`);
     } finally {
       setExtracting(false);
+    }
+  };
+
+  const handleSelectItem = (item: ItemData) => {
+    setActiveItemId(item.id);
+    setActiveItemQuote(item.quote);
+    const boxes = item.ocr_check?.bounding_boxes;
+    if (boxes && boxes.length > 0) {
+      setActiveBoxes(boxes);
+      setBoxNotFound(false);
+    } else {
+      setActiveBoxes(null);
+      setBoxNotFound(true);
     }
   };
 
@@ -365,14 +382,32 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
               />
             ) : currentPage?.signed_url ? (
               <div
-                className="transition-transform duration-150 flex items-center justify-center"
+                className="transition-transform duration-150 flex items-center justify-center max-w-full"
                 style={{ transform: `scale(${zoomLevel / 100})`, transformOrigin: "top center" }}
               >
-                <img
-                  src={currentPage.signed_url}
-                  alt={`Page ${currentPageIndex + 1}`}
-                  className="max-w-full h-auto rounded-lg shadow-md border bg-white"
-                />
+                <div className="relative inline-block max-w-full">
+                  <img
+                    src={currentPage.signed_url}
+                    alt={`Page ${currentPageIndex + 1}`}
+                    className="max-w-full h-auto rounded-lg shadow-md border bg-white block select-none"
+                  />
+
+                  {/* Highlight Box Overlay for Active Extracted Record */}
+                  {activeBoxes &&
+                    activeBoxes.map((box, idx) => (
+                      <div
+                        key={idx}
+                        className="absolute border-2 border-teal-500 bg-teal-400/35 rounded pointer-events-none transition-all duration-300 ring-4 ring-teal-300/40 animate-pulse"
+                        style={{
+                          left: `${box.x * 100}%`,
+                          top: `${box.y * 100}%`,
+                          width: `${box.w * 100}%`,
+                          height: `${box.h * 100}%`,
+                        }}
+                        title="Verbatim location on page scan"
+                      />
+                    ))}
+                </div>
               </div>
             ) : (
               <div className="text-center text-gray-400 space-y-2">
@@ -525,10 +560,10 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
                 {items.map((item) => (
                   <div
                     key={item.id}
-                    onClick={() => setActiveItemQuote(item.quote)}
+                    onClick={() => handleSelectItem(item)}
                     className={`border rounded-xl p-3.5 text-sm cursor-pointer transition-colors ${
-                      activeItemQuote === item.quote
-                        ? "border-teal-600 bg-teal-50/40"
+                      activeItemId === item.id
+                        ? "border-teal-600 bg-teal-50/50 shadow-sm ring-1 ring-teal-500"
                         : "hover:border-gray-300 bg-white"
                     }`}
                   >
@@ -585,9 +620,22 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
 
                     {item.quote && (
                       <div className="mt-2 text-xs text-gray-600 bg-gray-50/80 rounded p-2 border-l-2 border-teal-500">
-                        <span className="font-semibold text-gray-500 block text-[10px] uppercase tracking-wider mb-0.5">
-                          Verbatim Quote:
-                        </span>
+                        <div className="flex items-center justify-between mb-0.5">
+                          <span className="font-semibold text-gray-500 block text-[10px] uppercase tracking-wider">
+                            Verbatim Quote:
+                          </span>
+                          {activeItemId === item.id && (
+                            activeBoxes && activeBoxes.length > 0 ? (
+                              <span className="text-[10px] text-teal-800 bg-teal-100/90 px-1.5 py-0.5 rounded font-medium border border-teal-200">
+                                ✓ Highlighted on scan
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-amber-800 bg-amber-100/90 px-1.5 py-0.5 rounded font-medium border border-amber-200">
+                                ⓘ Location not found on page
+                              </span>
+                            )
+                          )}
+                        </div>
                         <p className="italic">&quot;{item.quote}&quot;</p>
                       </div>
                     )}

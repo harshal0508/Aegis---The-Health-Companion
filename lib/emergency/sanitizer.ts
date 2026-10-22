@@ -140,11 +140,23 @@ export function sanitizeResponderData(params: {
     };
   });
 
+  // Clinical safety rule: Deduplicate entries so responders never see identical records twice
+  const deduplicatedSanitizedList: SanitizedResponderItem[] = [];
+  const seenResponderKeys = new Set<string>();
+
+  for (const item of sanitizedList) {
+    const normKey = `${item.category}:${item.value.toLowerCase().replace(/[^\w]/g, "")}`;
+    if (!seenResponderKeys.has(normKey)) {
+      seenResponderKeys.add(normKey);
+      deduplicatedSanitizedList.push(item);
+    }
+  }
+
   const grouped = {
-    allergy: sanitizedList.filter((i) => i.category === "allergy"),
-    medication: sanitizedList.filter((i) => i.category === "medication"),
-    condition: sanitizedList.filter((i) => i.category === "condition"),
-    implant: sanitizedList.filter((i) => i.category === "implant"),
+    allergy: deduplicatedSanitizedList.filter((i) => i.category === "allergy"),
+    medication: deduplicatedSanitizedList.filter((i) => i.category === "medication"),
+    condition: deduplicatedSanitizedList.filter((i) => i.category === "condition"),
+    implant: deduplicatedSanitizedList.filter((i) => i.category === "implant"),
   };
 
   const showBloodGroup = allowedSet.has("blood_group");
@@ -156,7 +168,7 @@ export function sanitizeResponderData(params: {
     emergency_contact_name: showEmergencyContact ? profile?.emergency_contact_name || null : null,
     emergency_contact_phone: showEmergencyContact ? profile?.emergency_contact_phone || null : null,
     visible_categories: visibleCategories || [],
-    items: sanitizedList,
+    items: deduplicatedSanitizedList,
     grouped,
     // Clinical requirement: never say "No allergies"; state clearly that none are recorded.
     allergy_display_fallback: "No allergy information recorded",

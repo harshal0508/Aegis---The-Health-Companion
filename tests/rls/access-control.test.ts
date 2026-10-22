@@ -38,14 +38,14 @@ if (!ANON_KEY || !SERVICE_ROLE_KEY) {
 // Admin client bypasses RLS — used only for setup and teardown
 const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
   auth: { autoRefreshToken: false, persistSession: false },
-  realtime: { transport: ws },
+  realtime: { transport: ws as any },
 });
 
 // User-specific clients use the anon key so RLS is enforced
 function makeAnonClient(): SupabaseClient {
   return createClient(SUPABASE_URL, ANON_KEY, {
     auth: { autoRefreshToken: false, persistSession: false },
-    realtime: { transport: ws },
+    realtime: { transport: ws as any },
   });
 }
 

@@ -18,6 +18,7 @@ node_modules/
 # Next.js build output
 .next/
 out/
+*.tsbuildinfo
 
 # Supabase local data
 supabase/.branches/

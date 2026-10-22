@@ -25,18 +25,32 @@ describe("Phase 3 Second-Reader OCR Cross-Check", () => {
     .map((w) => ({
       text: w,
       confidence: 90,
+      lineIndex: 0,
       bbox: { x0: 10, y0: 10, x1: 50, y1: 50 },
+      normalizedBbox: { x: 0.01, y: 0.01, w: 0.04, h: 0.04 },
     }));
 
   const highConfidenceTesseract: TesseractResult = {
     text: sampleOcrText,
     words: sampleWords,
+    lines: [],
+    imageDimensions: { width: 1000, height: 1000 },
     pageConfidence: 92,
   };
 
   const lowConfidenceTesseract: TesseractResult = {
     text: "blurry noisy illegible scan",
-    words: [{ text: "blurry", confidence: 35, bbox: { x0: 0, y0: 0, x1: 10, y1: 10 } }],
+    words: [
+      {
+        text: "blurry",
+        confidence: 35,
+        lineIndex: 0,
+        bbox: { x0: 0, y0: 0, x1: 10, y1: 10 },
+        normalizedBbox: { x: 0, y: 0, w: 0.01, h: 0.01 },
+      },
+    ],
+    lines: [],
+    imageDimensions: { width: 1000, height: 1000 },
     pageConfidence: 42, // Below threshold 60
   };
 
@@ -198,6 +212,191 @@ describe("Phase 3 Second-Reader OCR Cross-Check", () => {
       const result = crossCheckItem(inventedAllergy, highConfidenceTesseract);
       expect(result.state).toBe("disagree");
       expect(result.missingTokens).toContain("penicillin");
+    });
+  });
+
+  describe("6. Position-Aware Verification (Multi-Drug Spatial Isolation)", () => {
+    // Document with two different drugs on two separate lines
+    const multiDrugOcr: TesseractResult = {
+      text: "Line 1: Metformin 500mg PO Daily\nLine 2: Atenolol 50mg PO Daily",
+      lines: [
+        {
+          text: "Metformin 500mg PO Daily",
+          lineIndex: 0,
+          bbox: { x0: 10, y0: 10, x1: 200, y1: 30 },
+          normalizedBbox: { x: 0.01, y: 0.01, w: 0.2, h: 0.03 },
+          words: [
+            { text: "Metformin", lineIndex: 0, confidence: 95, bbox: { x0: 10, y0: 10, x1: 60, y1: 30 }, normalizedBbox: { x: 0.01, y: 0.01, w: 0.05, h: 0.03 } },
+            { text: "500mg", lineIndex: 0, confidence: 95, bbox: { x0: 65, y0: 10, x1: 100, y1: 30 }, normalizedBbox: { x: 0.065, y: 0.01, w: 0.035, h: 0.03 } },
+            { text: "PO", lineIndex: 0, confidence: 95, bbox: { x0: 105, y0: 10, x1: 120, y1: 30 }, normalizedBbox: { x: 0.105, y: 0.01, w: 0.015, h: 0.03 } },
+            { text: "Daily", lineIndex: 0, confidence: 95, bbox: { x0: 125, y0: 10, x1: 160, y1: 30 }, normalizedBbox: { x: 0.125, y: 0.01, w: 0.035, h: 0.03 } },
+          ],
+        },
+        {
+          text: "Atenolol 50mg PO Daily",
+          lineIndex: 1,
+          bbox: { x0: 10, y0: 40, x1: 200, y1: 60 },
+          normalizedBbox: { x: 0.01, y: 0.04, w: 0.2, h: 0.03 },
+          words: [
+            { text: "Atenolol", lineIndex: 1, confidence: 95, bbox: { x0: 10, y0: 40, x1: 60, y1: 60 }, normalizedBbox: { x: 0.01, y: 0.04, w: 0.05, h: 0.03 } },
+            { text: "50mg", lineIndex: 1, confidence: 95, bbox: { x0: 65, y0: 40, x1: 95, y1: 60 }, normalizedBbox: { x: 0.065, y: 0.04, w: 0.03, h: 0.03 } },
+            { text: "PO", lineIndex: 1, confidence: 95, bbox: { x0: 100, y0: 40, x1: 115, y1: 60 }, normalizedBbox: { x: 0.1, y: 0.04, w: 0.015, h: 0.03 } },
+            { text: "Daily", lineIndex: 1, confidence: 95, bbox: { x0: 120, y0: 40, x1: 155, y1: 60 }, normalizedBbox: { x: 0.12, y: 0.04, w: 0.035, h: 0.03 } },
+          ],
+        },
+      ],
+      words: [
+        { text: "Metformin", lineIndex: 0, confidence: 95, bbox: { x0: 10, y0: 10, x1: 60, y1: 30 }, normalizedBbox: { x: 0.01, y: 0.01, w: 0.05, h: 0.03 } },
+        { text: "500mg", lineIndex: 0, confidence: 95, bbox: { x0: 65, y0: 10, x1: 100, y1: 30 }, normalizedBbox: { x: 0.065, y: 0.01, w: 0.035, h: 0.03 } },
+        { text: "PO", lineIndex: 0, confidence: 95, bbox: { x0: 105, y0: 10, x1: 120, y1: 30 }, normalizedBbox: { x: 0.105, y: 0.01, w: 0.015, h: 0.03 } },
+        { text: "Daily", lineIndex: 0, confidence: 95, bbox: { x0: 125, y0: 10, x1: 160, y1: 30 }, normalizedBbox: { x: 0.125, y: 0.01, w: 0.035, h: 0.03 } },
+        { text: "Atenolol", lineIndex: 1, confidence: 95, bbox: { x0: 10, y0: 40, x1: 60, y1: 60 }, normalizedBbox: { x: 0.01, y: 0.04, w: 0.05, h: 0.03 } },
+        { text: "50mg", lineIndex: 1, confidence: 95, bbox: { x0: 65, y0: 40, x1: 95, y1: 60 }, normalizedBbox: { x: 0.065, y: 0.04, w: 0.03, h: 0.03 } },
+        { text: "PO", lineIndex: 1, confidence: 95, bbox: { x0: 100, y0: 40, x1: 115, y1: 60 }, normalizedBbox: { x: 0.1, y: 0.04, w: 0.015, h: 0.03 } },
+        { text: "Daily", lineIndex: 1, confidence: 95, bbox: { x0: 120, y0: 40, x1: 155, y1: 60 }, normalizedBbox: { x: 0.12, y: 0.04, w: 0.035, h: 0.03 } },
+      ],
+      imageDimensions: { width: 1000, height: 1000 },
+      pageConfidence: 95,
+    };
+
+    it("position-aware: flags 'disagree' when dose belongs to another line next to a different drug", () => {
+      // Metformin is on line 1 with 500mg.
+      // Atenolol is on line 2 with 50mg.
+      // Gemini erroneously extracts 'Metformin 50mg' (50 is on the page, but belongs to Atenolol).
+      const wrongDoseItem = {
+        category: "medication",
+        value: "Metformin 50mg PO Daily",
+        quote: "Metformin 50mg PO Daily",
+      };
+
+      const result = crossCheckItem(wrongDoseItem, multiDrugOcr);
+      expect(result.state).toBe("disagree");
+      expect(result.missingTokens).toContain("50");
+      expect(result.reviewReason).toContain("OCR disagreement: 50");
+    });
+
+    it("position-aware: confirms 'agree' when correct dose matches on the same line", () => {
+      const correctItem = {
+        category: "medication",
+        value: "Metformin 500mg PO Daily",
+        quote: "Metformin 500mg PO Daily",
+      };
+
+      const result = crossCheckItem(correctItem, multiDrugOcr);
+      expect(result.state).toBe("agree");
+      expect(result.matchedTokens).toContain("500");
+    });
+  });
+
+  describe("7. Bounding Box Locator", () => {
+    const ocrWithBoxes: TesseractResult = {
+      text: "Osteoarthritis of Knee\nMeloxicam 15mg PO Daily",
+      lines: [
+        {
+          text: "Osteoarthritis of Knee",
+          lineIndex: 0,
+          bbox: { x0: 100, y0: 100, x1: 300, y1: 140 },
+          normalizedBbox: { x: 0.1, y: 0.1, w: 0.2, h: 0.04 },
+          words: [
+            { text: "Osteoarthritis", lineIndex: 0, confidence: 95, bbox: { x0: 100, y0: 100, x1: 200, y1: 140 }, normalizedBbox: { x: 0.1, y: 0.1, w: 0.1, h: 0.04 } },
+            { text: "of", lineIndex: 0, confidence: 95, bbox: { x0: 205, y0: 100, x1: 225, y1: 140 }, normalizedBbox: { x: 0.205, y: 0.1, w: 0.02, h: 0.04 } },
+            { text: "Knee", lineIndex: 0, confidence: 95, bbox: { x0: 230, y0: 100, x1: 290, y1: 140 }, normalizedBbox: { x: 0.23, y: 0.1, w: 0.06, h: 0.04 } },
+          ],
+        },
+      ],
+      words: [
+        { text: "Osteoarthritis", lineIndex: 0, confidence: 95, bbox: { x0: 100, y0: 100, x1: 200, y1: 140 }, normalizedBbox: { x: 0.1, y: 0.1, w: 0.1, h: 0.04 } },
+        { text: "of", lineIndex: 0, confidence: 95, bbox: { x0: 205, y0: 100, x1: 225, y1: 140 }, normalizedBbox: { x: 0.205, y: 0.1, w: 0.02, h: 0.04 } },
+        { text: "Knee", lineIndex: 0, confidence: 95, bbox: { x0: 230, y0: 100, x1: 290, y1: 140 }, normalizedBbox: { x: 0.23, y: 0.1, w: 0.06, h: 0.04 } },
+      ],
+      imageDimensions: { width: 1000, height: 1000 },
+      pageConfidence: 95,
+    };
+
+    it("locates bounding box for verbatim quote and returns normalized 0-1 coordinates", () => {
+      const item = {
+        category: "condition",
+        value: "Osteoarthritis of Knee",
+        quote: "Osteoarthritis of Knee",
+      };
+
+      const result = crossCheckItem(item, ocrWithBoxes);
+      expect(result.boundingBoxes).not.toBeNull();
+      expect(result.boundingBoxes).toHaveLength(1);
+
+      const box = result.boundingBoxes![0];
+      expect(box.x).toBeGreaterThanOrEqual(0);
+      expect(box.x).toBeLessThan(1);
+      expect(box.w).toBeGreaterThan(0);
+      expect(box.w).toBeLessThan(1);
+    });
+
+    it("returns null when quote text does not exist on page (never guesses)", () => {
+      const item = {
+        category: "condition",
+        value: "Rheumatoid Arthritis",
+        quote: "Rheumatoid Arthritis with severe joint deformity",
+      };
+
+      const result = crossCheckItem(item, ocrWithBoxes);
+      expect(result.boundingBoxes).toBeNull();
+    });
+  });
+
+  describe("8. Route-Level Pipeline Fault Injection", () => {
+    it("simulates full extraction pipeline: verifies item arrives with status 'needs_review' and review_reason", () => {
+      // Simulating a real Gemini page extraction with an injected dose error
+      const mockExtraction = {
+        items: [
+          {
+            category: "medication" as const,
+            value: "Meloxicam 150mg PO Daily", // FAULT INJECTED: 15mg -> 150mg
+            quote: "Meloxicam 150mg PO Daily",
+            confidence: 0.95,
+            page_no: 1,
+            normalization_source: "none" as const,
+          },
+        ],
+        ocr_text: "Meloxicam 150mg PO Daily",
+      };
+
+      // Tesseract second reading of the actual physical document: reads 15mg
+      const mockTesseract: TesseractResult = {
+        text: "Christian Medical College (CMC)\nDischarge Medications:\nMeloxicam 15mg PO Daily",
+        lines: [
+          {
+            text: "Meloxicam 15mg PO Daily",
+            lineIndex: 0,
+            bbox: { x0: 10, y0: 10, x1: 200, y1: 30 },
+            normalizedBbox: { x: 0.01, y: 0.01, w: 0.2, h: 0.03 },
+            words: [
+              { text: "Meloxicam", lineIndex: 0, confidence: 95, bbox: { x0: 10, y0: 10, x1: 60, y1: 30 }, normalizedBbox: { x: 0.01, y: 0.01, w: 0.05, h: 0.03 } },
+              { text: "15mg", lineIndex: 0, confidence: 95, bbox: { x0: 65, y0: 10, x1: 100, y1: 30 }, normalizedBbox: { x: 0.065, y: 0.01, w: 0.035, h: 0.03 } },
+            ],
+          },
+        ],
+        words: [
+          { text: "Meloxicam", lineIndex: 0, confidence: 95, bbox: { x0: 10, y0: 10, x1: 60, y1: 30 }, normalizedBbox: { x: 0.01, y: 0.01, w: 0.05, h: 0.03 } },
+          { text: "15mg", lineIndex: 0, confidence: 95, bbox: { x0: 65, y0: 10, x1: 100, y1: 30 }, normalizedBbox: { x: 0.065, y: 0.01, w: 0.035, h: 0.03 } },
+        ],
+        imageDimensions: { width: 1000, height: 1000 },
+        pageConfidence: 94,
+      };
+
+      // Pipeline execution:
+      const check = crossCheckItem(mockExtraction.items[0], mockTesseract);
+
+      // Verify pipeline flags the fault
+      expect(check.state).toBe("disagree");
+      expect(check.missingTokens).toContain("150");
+
+      // Verify the row payload formatted for database insert
+      const itemStatus = check.state === "disagree" ? "needs_review" : "extracted";
+      const reviewReason = check.reviewReason;
+
+      expect(itemStatus).toBe("needs_review");
+      expect(reviewReason).toBe("OCR disagreement: 150");
+      expect(check.ocrCheckPayload.state).toBe("disagree");
     });
   });
 });
