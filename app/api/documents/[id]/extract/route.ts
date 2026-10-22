@@ -104,6 +104,7 @@ export async function POST(
     let detectedDocDateType: string | null = null;
     let totalItemsCreated = 0;
     let verifiedItemsCount = 0;
+    let primaryError: string | null = null;
 
     const pageIds = pages.map((p) => p.id);
 
@@ -166,15 +167,32 @@ export async function POST(
       const imageBuffer = Buffer.from(arrayBuffer);
       const mimeType = activeBlob.type || (ext === "pdf" ? "application/pdf" : "image/jpeg");
 
-      // Run Primary Vision Perception (Gemini) and Secondary OCR (Tesseract) in parallel
-      const [extractionResult, secondaryOcrResult] = await Promise.all([
+      // Run Primary Vision Perception (Gemini) and Secondary OCR (Tesseract) concurrently
+      let extractionResult: any = null;
+      let secondaryOcrResult: TesseractResult | null = null;
+
+      const [geminiSettled, ocrSettled] = await Promise.allSettled([
         provider.extractPage(base64, mimeType, page.page_no),
-        ocrPage(imageBuffer).catch((ocrErr: any) => {
-          // Non-blocking: If secondary reader fails or times out, proceed with primary extraction
-          console.warn("[ExtractRoute] Second-reader OCR notice:", ocrErr.message);
-          return null;
-        }),
+        ocrPage(imageBuffer),
       ]);
+
+      if (geminiSettled.status === "fulfilled") {
+        extractionResult = geminiSettled.value;
+      } else {
+        primaryError = geminiSettled.reason?.message || "Vision extraction failed";
+        console.warn("[ExtractRoute] Primary Gemini perception warning:", primaryError);
+      }
+
+      if (ocrSettled.status === "fulfilled") {
+        secondaryOcrResult = ocrSettled.value;
+      } else {
+        console.warn("[ExtractRoute] Secondary OCR warning:", ocrSettled.reason?.message);
+      }
+
+      // If both readers failed, throw error so user is notified
+      if (!extractionResult && !secondaryOcrResult) {
+        throw new Error(primaryError || "Both primary and secondary perception readers failed.");
+      }
 
       if (secondaryOcrResult) {
         // Update bounding boxes for all existing items on this page (even if confirmed or omitted by Gemini)
@@ -200,44 +218,46 @@ export async function POST(
         }
       }
 
-      // Rule 4: Extract document date when present (distinguishing discharge vs signed date)
-      if (!detectedDocDate && extractionResult.doc_date) {
-        detectedDocDate = extractionResult.doc_date;
-        detectedDocDateType = extractionResult.doc_date_type || "unspecified";
-      }
+      // If Gemini returned extractions, process and insert them
+      if (extractionResult) {
+        // Rule 4: Extract document date when present (distinguishing discharge vs signed date)
+        if (!detectedDocDate && extractionResult.doc_date) {
+          detectedDocDate = extractionResult.doc_date;
+          detectedDocDateType = extractionResult.doc_date_type || "unspecified";
+        }
 
-      // Rule 1: Quote Verification Gate (verifies quote appears in primary transcript)
-      const verification = verifyQuotesAgainstOcr(
-        extractionResult.items,
-        extractionResult.ocr_text
-      );
+        // Rule 1: Quote Verification Gate (verifies quote appears in primary transcript)
+        const verification = verifyQuotesAgainstOcr(
+          extractionResult.items,
+          extractionResult.ocr_text
+        );
 
-      // Save OCR texts to page
-      const pageUpdateData: Record<string, any> = {
-        ocr_text: extractionResult.ocr_text,
-      };
-      if (secondaryOcrResult?.text) {
-        pageUpdateData.ocr_text_secondary = secondaryOcrResult.text;
-      }
+        // Save OCR texts to page
+        const pageUpdateData: Record<string, any> = {
+          ocr_text: extractionResult.ocr_text,
+        };
+        if (secondaryOcrResult?.text) {
+          pageUpdateData.ocr_text_secondary = secondaryOcrResult.text;
+        }
 
-      try {
-        await supabase
-          .from("pages")
-          .update(pageUpdateData)
-          .eq("id", page.id);
-      } catch {
-        // Fallback if ocr_text_secondary column migration is pending
-        delete pageUpdateData.ocr_text_secondary;
-        await supabase
-          .from("pages")
-          .update(pageUpdateData)
-          .eq("id", page.id);
-      }
+        try {
+          await supabase
+            .from("pages")
+            .update(pageUpdateData)
+            .eq("id", page.id);
+        } catch {
+          // Fallback if ocr_text_secondary column migration is pending
+          delete pageUpdateData.ocr_text_secondary;
+          await supabase
+            .from("pages")
+            .update(pageUpdateData)
+            .eq("id", page.id);
+        }
 
-      // Insert verified / needs_review items into database (deduplicated by category + normalized value)
-      const deduplicatedItems = deduplicateExtractedItems(verification.items);
+        // Insert verified / needs_review items into database (deduplicated by category + normalized value)
+        const deduplicatedItems = deduplicateExtractedItems(verification.items);
 
-      if (deduplicatedItems.length > 0) {
+        if (deduplicatedItems.length > 0) {
         const rowsToInsert = deduplicatedItems.map((item) => {
           let itemStatus: "extracted" | "needs_review" = item.status;
           let ocrCheckPayload: any = null;
@@ -315,6 +335,7 @@ export async function POST(
         verifiedItemsCount += deduplicatedItems.filter((i) => i.verified).length;
       }
     }
+  }
 
     // 8. Update Document: mark ready, set doc_date if detected and not already set
     const updateDocData: Record<string, any> = {
@@ -352,6 +373,7 @@ export async function POST(
         verifiedItems: verifiedItemsCount,
         docDateDetected: detectedDocDate,
       },
+      warning: primaryError ? `Note: ${primaryError}` : undefined,
     });
   } catch (err: any) {
     return NextResponse.json(
