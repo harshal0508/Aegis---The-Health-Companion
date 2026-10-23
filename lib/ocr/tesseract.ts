@@ -57,18 +57,11 @@ export interface OcrOptions {
 const inMemoryCache = new Map<string, TesseractResult>();
 
 /**
- * Absolute path to the Tesseract worker script — resolved once at module load
- * time before Next.js can bundle the file and break __dirname-based resolution.
- * require.resolve() always returns an absolute OS path regardless of bundler context.
- */
-const TESSERACT_WORKER_PATH: string = require.resolve(
-  "tesseract.js/src/worker-script/node/index.js"
-);
-
-/**
  * Absolute path to the directory containing eng.traineddata.
  * Resolved at module load to avoid process.cwd() drift inside route handlers.
- * Falls back to undefined so Tesseract will download from CDN if the file is absent.
+ * Falls back to undefined so Tesseract downloads from CDN if the file is absent.
+ * tesseract.js is listed in serverExternalPackages in next.config.mjs so its
+ * own __dirname-based worker-script path resolution is never broken by bundling.
  */
 const TESSERACT_LANG_PATH: string | undefined = (() => {
   const localLangPath = path.join(process.cwd(), "eng.traineddata");
@@ -175,11 +168,10 @@ async function runOcrPage(
   const imgW = preprocessed.width;
   const imgH = preprocessed.height;
 
-  // 4. Run Tesseract with explicit absolute workerPath so Next.js bundling
-  //    cannot break __dirname-based resolution inside tesseract.js internals.
-  //    Both constants are resolved at module load time via require.resolve().
+  // 4. Run Tesseract. tesseract.js is excluded from Next.js bundling via
+  //    serverExternalPackages, so its internal __dirname-based worker-script
+  //    path resolves correctly against the real node_modules directory.
   const ret = await Tesseract.recognize(preprocessed.buffer, "eng", {
-    workerPath: TESSERACT_WORKER_PATH,
     langPath: TESSERACT_LANG_PATH,
     cacheMethod: "none",
   } as any);
