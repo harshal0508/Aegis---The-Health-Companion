@@ -2,7 +2,7 @@ import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 import sharp from "sharp";
-import { createWorker, Worker } from "tesseract.js";
+import * as Tesseract from "tesseract.js";
 
 export interface BoundingBox {
   x0: number;
@@ -56,34 +56,22 @@ export interface OcrOptions {
  */
 const inMemoryCache = new Map<string, TesseractResult>();
 
-// Reusable Tesseract worker singleton with queue serialization
-let workerInstance: Worker | null = null;
-let workerPromise: Promise<Worker> | null = null;
-let queuePromise: Promise<any> = Promise.resolve();
-
-async function getWorker(): Promise<Worker> {
-  if (workerInstance) return workerInstance;
-  if (!workerPromise) {
-    workerPromise = (async () => {
-      const localLangPath = path.join(process.cwd(), "eng.traineddata");
-      const options: any = {};
-      if (fs.existsSync(localLangPath)) {
-        options.langPath = process.cwd();
-      }
-      const worker = await createWorker("eng", 1, options);
-      workerInstance = worker;
-      return worker;
-    })();
-  }
-  return workerPromise;
+/**
+ * Resolve the local eng.traineddata path for Tesseract.
+ * This avoids any network download and keeps OCR fully offline.
+ */
+function getLangPath(): string | undefined {
+  const localLangPath = path.join(process.cwd(), "eng.traineddata");
+  return fs.existsSync(localLangPath) ? process.cwd() : undefined;
 }
 
+/**
+ * No-op: the stateless Tesseract.recognize() API spawns a fresh worker per
+ * call and cleans it up automatically, so there is no persistent instance to
+ * terminate. This export is kept for backwards-compatibility with eval scripts.
+ */
 export async function terminateOcrWorker(): Promise<void> {
-  if (workerInstance) {
-    await workerInstance.terminate();
-    workerInstance = null;
-    workerPromise = null;
-  }
+  // Nothing to terminate — workers are ephemeral per recognize() call
 }
 
 /**
@@ -177,104 +165,98 @@ async function runOcrPage(
   const imgW = preprocessed.width;
   const imgH = preprocessed.height;
 
-  // 4. Enqueue recognition sequentially to protect single worker instance
-  const result: TesseractResult = await new Promise((resolve, reject) => {
-    queuePromise = queuePromise.then(async () => {
-      try {
-        const worker = await getWorker();
-        const ret = await worker.recognize(preprocessed.buffer, {}, { blocks: true });
+  // 4. Run Tesseract using the stateless top-level recognize() API.
+  //    This avoids the Node Worker absolute-path resolution issue that occurs
+  //    when createWorker() is used inside a Next.js API route context.
+  const langPath = getLangPath();
+  const workerOptions: any = { langPath };
 
-        const words: OcrWord[] = [];
-        const lines: OcrLine[] = [];
-        let globalLineIdx = 0;
+  const ret = await Tesseract.recognize(preprocessed.buffer, "eng", workerOptions);
 
-        for (const block of ret.data.blocks || []) {
-          for (const para of block.paragraphs || []) {
-            for (const line of para.lines || []) {
-              const lineWords: OcrWord[] = [];
-              const lineBox: BoundingBox = {
-                x0: line.bbox.x0,
-                y0: line.bbox.y0,
-                x1: line.bbox.x1,
-                y1: line.bbox.y1,
-              };
+  const words: OcrWord[] = [];
+  const lines: OcrLine[] = [];
+  let globalLineIdx = 0;
 
-              const normLineBox: NormalizedBox = {
-                x: Math.max(0, Math.min(1, lineBox.x0 / imgW)),
-                y: Math.max(0, Math.min(1, lineBox.y0 / imgH)),
-                w: Math.max(0, Math.min(1, (lineBox.x1 - lineBox.x0) / imgW)),
-                h: Math.max(0, Math.min(1, (lineBox.y1 - lineBox.y0) / imgH)),
-              };
-
-              for (const word of line.words || []) {
-                const text = (word.text || "").trim();
-                if (text) {
-                  const wBox: BoundingBox = {
-                    x0: word.bbox.x0,
-                    y0: word.bbox.y0,
-                    x1: word.bbox.x1,
-                    y1: word.bbox.y1,
-                  };
-                  const normWBox: NormalizedBox = {
-                    x: Math.max(0, Math.min(1, wBox.x0 / imgW)),
-                    y: Math.max(0, Math.min(1, wBox.y0 / imgH)),
-                    w: Math.max(0, Math.min(1, (wBox.x1 - wBox.x0) / imgW)),
-                    h: Math.max(0, Math.min(1, (wBox.y1 - wBox.y0) / imgH)),
-                  };
-
-                  const wordObj: OcrWord = {
-                    text,
-                    bbox: wBox,
-                    normalizedBbox: normWBox,
-                    confidence: Math.round(word.confidence ?? 0),
-                    lineIndex: globalLineIdx,
-                  };
-                  words.push(wordObj);
-                  lineWords.push(wordObj);
-                }
-              }
-
-              if (lineWords.length > 0) {
-                lines.push({
-                  text: line.text?.trim() || "",
-                  lineIndex: globalLineIdx,
-                  bbox: lineBox,
-                  normalizedBbox: normLineBox,
-                  words: lineWords,
-                });
-                globalLineIdx++;
-              }
-            }
-          }
-        }
-
-        const out: TesseractResult = {
-          text: ret.data.text || "",
-          words,
-          lines,
-          imageDimensions: { width: imgW, height: imgH },
-          pageConfidence: Math.round(ret.data.confidence ?? 0),
+  for (const block of ret.data.blocks || []) {
+    for (const para of block.paragraphs || []) {
+      for (const line of para.lines || []) {
+        const lineWords: OcrWord[] = [];
+        const lineBox: BoundingBox = {
+          x0: line.bbox.x0,
+          y0: line.bbox.y0,
+          x1: line.bbox.x1,
+          y1: line.bbox.y1,
         };
 
-        // Populate in-memory cache
-        inMemoryCache.set(hash, out);
+        const normLineBox: NormalizedBox = {
+          x: Math.max(0, Math.min(1, lineBox.x0 / imgW)),
+          y: Math.max(0, Math.min(1, lineBox.y0 / imgH)),
+          w: Math.max(0, Math.min(1, (lineBox.x1 - lineBox.x0) / imgW)),
+          h: Math.max(0, Math.min(1, (lineBox.y1 - lineBox.y0) / imgH)),
+        };
 
-        // Populate disk cache only if explicitly requested (eval only)
-        if (options.cacheDir && fs.existsSync(options.cacheDir)) {
-          const diskPath = path.join(options.cacheDir, `${hash}.json`);
-          try {
-            fs.writeFileSync(diskPath, JSON.stringify(out));
-          } catch {
-            // Ignore disk write errors
+        for (const word of line.words || []) {
+          const text = (word.text || "").trim();
+          if (text) {
+            const wBox: BoundingBox = {
+              x0: word.bbox.x0,
+              y0: word.bbox.y0,
+              x1: word.bbox.x1,
+              y1: word.bbox.y1,
+            };
+            const normWBox: NormalizedBox = {
+              x: Math.max(0, Math.min(1, wBox.x0 / imgW)),
+              y: Math.max(0, Math.min(1, wBox.y0 / imgH)),
+              w: Math.max(0, Math.min(1, (wBox.x1 - wBox.x0) / imgW)),
+              h: Math.max(0, Math.min(1, (wBox.y1 - wBox.y0) / imgH)),
+            };
+
+            const wordObj: OcrWord = {
+              text,
+              bbox: wBox,
+              normalizedBbox: normWBox,
+              confidence: Math.round(word.confidence ?? 0),
+              lineIndex: globalLineIdx,
+            };
+            words.push(wordObj);
+            lineWords.push(wordObj);
           }
         }
 
-        resolve(out);
-      } catch (err) {
-        reject(err);
+        if (lineWords.length > 0) {
+          lines.push({
+            text: line.text?.trim() || "",
+            lineIndex: globalLineIdx,
+            bbox: lineBox,
+            normalizedBbox: normLineBox,
+            words: lineWords,
+          });
+          globalLineIdx++;
+        }
       }
-    });
-  });
+    }
+  }
 
-  return result;
+  const out: TesseractResult = {
+    text: ret.data.text || "",
+    words,
+    lines,
+    imageDimensions: { width: imgW, height: imgH },
+    pageConfidence: Math.round(ret.data.confidence ?? 0),
+  };
+
+  // Populate in-memory cache
+  inMemoryCache.set(hash, out);
+
+  // Populate disk cache only if explicitly requested (eval only)
+  if (options.cacheDir && fs.existsSync(options.cacheDir)) {
+    const diskPath = path.join(options.cacheDir, `${hash}.json`);
+    try {
+      fs.writeFileSync(diskPath, JSON.stringify(out));
+    } catch {
+      // Ignore disk write errors
+    }
+  }
+
+  return out;
 }

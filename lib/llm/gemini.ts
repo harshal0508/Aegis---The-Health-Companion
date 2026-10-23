@@ -187,7 +187,7 @@ CRITICAL RULES:
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
-          signal: AbortSignal.timeout(30000), // 30s timeout to prevent hanging connections
+          signal: AbortSignal.timeout(60000), // 60s timeout — Gemini can be slow on large images
         });
 
         if (response.ok) {
@@ -252,6 +252,10 @@ CRITICAL RULES:
         }
         throw new Error(errMsg);
       } catch (err: any) {
+        // Do NOT retry on timeout (AbortError) or quota errors — surface immediately
+        if (err?.name === "AbortError" || err?.name === "TimeoutError" || err?.message?.includes("429")) {
+          throw err;
+        }
         if (attempts >= maxAttempts) throw err;
         await new Promise((resolve) => setTimeout(resolve, delayMs));
         delayMs *= 2;
