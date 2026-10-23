@@ -57,13 +57,23 @@ export interface OcrOptions {
 const inMemoryCache = new Map<string, TesseractResult>();
 
 /**
- * Resolve the local eng.traineddata path for Tesseract.
- * This avoids any network download and keeps OCR fully offline.
+ * Absolute path to the Tesseract worker script — resolved once at module load
+ * time before Next.js can bundle the file and break __dirname-based resolution.
+ * require.resolve() always returns an absolute OS path regardless of bundler context.
  */
-function getLangPath(): string | undefined {
+const TESSERACT_WORKER_PATH: string = require.resolve(
+  "tesseract.js/src/worker-script/node/index.js"
+);
+
+/**
+ * Absolute path to the directory containing eng.traineddata.
+ * Resolved at module load to avoid process.cwd() drift inside route handlers.
+ * Falls back to undefined so Tesseract will download from CDN if the file is absent.
+ */
+const TESSERACT_LANG_PATH: string | undefined = (() => {
   const localLangPath = path.join(process.cwd(), "eng.traineddata");
   return fs.existsSync(localLangPath) ? process.cwd() : undefined;
-}
+})();
 
 /**
  * No-op: the stateless Tesseract.recognize() API spawns a fresh worker per
@@ -123,7 +133,7 @@ export async function ocrPage(
   imageBuffer: Buffer,
   options: OcrOptions = { useCache: true }
 ): Promise<TesseractResult> {
-  const timeoutMs = options.timeoutMs ?? 15000;
+  const timeoutMs = options.timeoutMs ?? 60000; // 60s — preprocessing + OCR on large scans can take 30–50s
   return Promise.race([
     runOcrPage(imageBuffer, options),
     new Promise<TesseractResult>((_, reject) =>
@@ -165,13 +175,14 @@ async function runOcrPage(
   const imgW = preprocessed.width;
   const imgH = preprocessed.height;
 
-  // 4. Run Tesseract using the stateless top-level recognize() API.
-  //    This avoids the Node Worker absolute-path resolution issue that occurs
-  //    when createWorker() is used inside a Next.js API route context.
-  const langPath = getLangPath();
-  const workerOptions: any = { langPath };
-
-  const ret = await Tesseract.recognize(preprocessed.buffer, "eng", workerOptions);
+  // 4. Run Tesseract with explicit absolute workerPath so Next.js bundling
+  //    cannot break __dirname-based resolution inside tesseract.js internals.
+  //    Both constants are resolved at module load time via require.resolve().
+  const ret = await Tesseract.recognize(preprocessed.buffer, "eng", {
+    workerPath: TESSERACT_WORKER_PATH,
+    langPath: TESSERACT_LANG_PATH,
+    cacheMethod: "none",
+  } as any);
 
   const words: OcrWord[] = [];
   const lines: OcrLine[] = [];
