@@ -185,12 +185,9 @@ export default async function HomePage() {
                 <ShieldCheck className="h-8 w-8" />
               </div>
               <div>
-                <div className="flex items-center gap-2">
-                  <h2 className="text-lg sm:text-xl font-extrabold tracking-tight text-white leading-tight">
-                    Emergency Medical ID
-                  </h2>
-                  <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 animate-ping shrink-0" />
-                </div>
+                <h2 className="text-lg sm:text-xl font-extrabold tracking-tight text-white leading-tight">
+                  Emergency Medical ID
+                </h2>
                 <p className="text-xs sm:text-sm text-rose-100 mt-1 font-medium max-w-xl leading-relaxed">
                   Instant scan for paramedics and ER doctors — shows your blood group, confirmed allergies, and emergency contact phone without requiring a login.
                 </p>
