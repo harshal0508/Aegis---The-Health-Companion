@@ -233,14 +233,9 @@ export function AdvisoriesHub({
       {/* 1. Page Header (Airy, Open, Clean) */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-              Outbreak Radar
-            </h1>
-            <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-200/80 rounded-md">
-              Live Surveillance
-            </span>
-          </div>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+            Outbreak Radar
+          </h1>
           <p className="text-xs sm:text-sm text-slate-500 font-medium mt-1">
             Official IDSP epidemiological notices, real-time press alerts, and public health guidelines
           </p>
@@ -249,7 +244,6 @@ export function AdvisoriesHub({
         {/* Location Chip & Push Notification Pill */}
         <div className="flex items-center gap-2.5 flex-wrap">
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white border border-slate-200 shadow-2xs text-xs font-semibold text-slate-800">
-            <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0 animate-pulse" />
             <MapPin className="h-3.5 w-3.5 text-indigo-600 shrink-0" />
             <span className="truncate max-w-[200px] sm:max-w-xs">{currentLocality.displayName}</span>
           </div>
@@ -710,14 +704,17 @@ export function AdvisoriesHub({
       )}
 
       {/* 4. Assistive Clinical Boundary Notice */}
-      <div className="apple-card p-4.5 bg-slate-50/70 border border-slate-200/80 text-xs text-slate-600">
+      <div className="apple-card p-4 sm:p-5 bg-slate-50/80 border border-slate-200/80 text-xs text-slate-600 max-w-2xl mx-auto rounded-2xl shadow-2xs">
         <div className="flex items-start gap-3">
           <Info className="h-4 w-4 text-slate-500 shrink-0 mt-0.5" />
-          <p className="leading-relaxed">
-            <strong>Assistive Boundary Notice:</strong> MedAnchor organizes document excerpts, live regional media reports,
-            and links to official public health references. This service does not provide clinical diagnoses, evaluate active symptoms,
-            or recommend medication changes. Always consult your treating physician or a qualified healthcare professional.
-          </p>
+          <div className="space-y-1">
+            <span className="font-bold text-slate-800 text-xs block">
+              Assistive Public Health Notice
+            </span>
+            <p className="leading-relaxed text-slate-500 text-[11px]">
+              MedAnchor organizes public surveillance reports and official guideline references. This service does not provide clinical diagnoses, evaluate active symptoms, or recommend treatment changes. Always consult your treating physician.
+            </p>
+          </div>
         </div>
       </div>
     </div>
