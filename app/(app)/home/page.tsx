@@ -59,7 +59,6 @@ export default async function HomePage() {
   const conditionsCount = (confirmedItems || []).filter((i) => i.category === "condition").length;
 
   const firstName = profile.full_name ? profile.full_name.split(" ")[0] : "Patient";
-  const hasIceContact = Boolean(profile.emergency_contact_phone || profile.emergency_contact_name);
 
   return (
     <div className="space-y-6">
@@ -195,17 +194,6 @@ export default async function HomePage() {
                 <p className="text-xs sm:text-sm text-rose-100 mt-1 font-medium max-w-xl leading-relaxed">
                   Instant scan for paramedics and ER doctors — shows your blood group, confirmed allergies, and emergency contact phone without requiring a login.
                 </p>
-                <div className="flex flex-wrap items-center gap-2 mt-2.5">
-                  <span className="text-[10px] font-semibold tracking-wide px-2.5 py-0.5 bg-white/20 rounded-full text-white backdrop-blur-xs">
-                    Blood Group: {profile.blood_group || "Not set"}
-                  </span>
-                  <span className="text-[10px] font-semibold tracking-wide px-2.5 py-0.5 bg-white/20 rounded-full text-white backdrop-blur-xs">
-                    {allergiesCount > 0 ? `${allergiesCount} Critical Allergy Alert` : "No Known Allergies"}
-                  </span>
-                  <span className="text-[10px] font-semibold tracking-wide px-2.5 py-0.5 bg-white/20 rounded-full text-white backdrop-blur-xs">
-                    {hasIceContact ? "ICE Contact Active" : "Add Emergency Contact"}
-                  </span>
-                </div>
               </div>
             </div>
 
