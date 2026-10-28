@@ -168,13 +168,23 @@ async function runOcrPage(
   const imgW = preprocessed.width;
   const imgH = preprocessed.height;
 
-  // 4. Run Tesseract. tesseract.js is excluded from Next.js bundling via
-  //    serverExternalPackages, so its internal __dirname-based worker-script
-  //    path resolves correctly against the real node_modules directory.
-  const ret = await Tesseract.recognize(preprocessed.buffer, "eng", {
+  // 4. Run Tesseract Worker with explicit blocks output format enabled.
+  // In Tesseract.js v5+, blocks/words/bboxes are only returned when requested via { blocks: true }.
+  const worker = await Tesseract.createWorker("eng", 1, {
     langPath: TESSERACT_LANG_PATH,
     cacheMethod: "none",
   } as any);
+
+  let ret: any;
+  try {
+    ret = await worker.recognize(
+      preprocessed.buffer,
+      {},
+      { text: true, blocks: true }
+    );
+  } finally {
+    await worker.terminate();
+  }
 
   const words: OcrWord[] = [];
   const lines: OcrLine[] = [];

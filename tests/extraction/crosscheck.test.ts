@@ -399,13 +399,20 @@ describe("Phase 3 Second-Reader OCR Cross-Check", () => {
       expect(check.ocrCheckPayload.state).toBe("disagree");
     });
 
-    it("verifies Doc 2 (Apollo Health City) items against cached Tesseract output", async () => {
+    it("verifies Doc 2 (Apollo Health City) items with live Tesseract OCR", async () => {
       const fs = await import("fs");
       const path = await import("path");
-      const cachePath = path.resolve("test-files/cache/tesseract/b83f6204aafbdad00d0f79ab685d50f99a49464da556a6b1bbbb0331e7908d14.json");
-      if (!fs.existsSync(cachePath)) return;
+      const { ocrPage } = await import("@/lib/ocr/tesseract");
+      const imgPath = path.resolve("test-files/med_doc_discharge_summary_200002_noisy.jpg");
+      if (!fs.existsSync(imgPath)) return;
 
-      const tesseractResult = JSON.parse(fs.readFileSync(cachePath, "utf-8"));
+      const imgBuffer = fs.readFileSync(imgPath);
+      console.log("Starting live ocrPage with blocks: true...");
+      const tesseractResult = await ocrPage(imgBuffer, { useCache: false });
+      console.log("Live OCR confidence:", tesseractResult.pageConfidence, "words:", tesseractResult.words.length, "lines:", tesseractResult.lines.length);
+
+      expect(tesseractResult.words.length).toBeGreaterThan(100);
+      expect(tesseractResult.lines.length).toBeGreaterThan(10);
 
       const sita = {
         category: "medication",
@@ -413,6 +420,7 @@ describe("Phase 3 Second-Reader OCR Cross-Check", () => {
         quote: "Sitagliptin 100mg PO Daily",
       };
       const checkSita = crossCheckItem(sita, tesseractResult);
+      console.log("LIVE CHECK SITA:", checkSita.state, checkSita.reviewReason, "missing:", checkSita.missingTokens, "boxes:", checkSita.boundingBoxes?.length);
       expect(checkSita.state).toBe("agree");
       expect(checkSita.missingTokens).toHaveLength(0);
       expect(checkSita.boundingBoxes && checkSita.boundingBoxes.length > 0).toBe(true);
@@ -423,6 +431,7 @@ describe("Phase 3 Second-Reader OCR Cross-Check", () => {
         quote: "Metformin 500mg PO BID",
       };
       const checkMet = crossCheckItem(met, tesseractResult);
+      console.log("LIVE CHECK MET:", checkMet.state, checkMet.reviewReason, "missing:", checkMet.missingTokens, "boxes:", checkMet.boundingBoxes?.length);
       expect(checkMet.state).toBe("agree");
       expect(checkMet.missingTokens).toHaveLength(0);
       expect(checkMet.boundingBoxes && checkMet.boundingBoxes.length > 0).toBe(true);
@@ -433,10 +442,10 @@ describe("Phase 3 Second-Reader OCR Cross-Check", () => {
         quote: "Type 2 Diabetes Mellitus (ICD-10: E11.9)",
       };
       const checkCond = crossCheckItem(cond, tesseractResult);
-      console.log("CHECK COND (with ICD):", checkCond.state, "boxes:", checkCond.boundingBoxes);
+      console.log("LIVE CHECK COND:", checkCond.state, checkCond.reviewReason, "missing:", checkCond.missingTokens, "boxes:", checkCond.boundingBoxes?.length);
       expect(checkCond.state).toBe("agree");
       expect(checkCond.missingTokens).toHaveLength(0);
       expect(checkCond.boundingBoxes && checkCond.boundingBoxes.length > 0).toBe(true);
-    });
+    }, 60000);
   });
 });
