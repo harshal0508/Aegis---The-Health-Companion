@@ -324,24 +324,13 @@ export function EmergencyCardManager() {
         )}
       </div>
 
-      {/* Security & Provenance Rules Notice */}
-      <div className="bg-slate-50 border rounded-xl p-4.5 space-y-2 text-xs text-slate-700">
-        <div className="flex items-center gap-2 font-bold text-slate-900">
-          <Info className="h-4 w-4 text-teal-600 flex-shrink-0" />
-          <span>Emergency Card Safety Guarantees:</span>
-        </div>
-        <ul className="list-disc pl-5 space-y-1 text-slate-600">
-          <li>
-            <strong>Confirmed Records Only:</strong> Unconfirmed AI extractions never appear on this card.
-          </li>
-          <li>
-            <strong>128-Bit Cryptographic Token:</strong> The token is never stored in plaintext—only its SHA-256 hash.
-          </li>
-          <li>
-            <strong>Wallet Card Privacy:</strong> The printable card includes ONLY your Name, Blood Group, and QR code. Medications and allergies are never printed physically on the card to prevent stale data hazards.
-          </li>
-        </ul>
-      </div>
+      {/* Wallet Card Privacy Note (Unboxed, single point) */}
+      <p className="text-xs text-slate-500 flex items-start gap-2 px-1">
+        <Info className="h-4 w-4 text-slate-400 shrink-0 mt-0.5" />
+        <span>
+          <strong className="text-slate-700 font-semibold">Wallet Card Privacy:</strong> The printable card includes ONLY your Name, Blood Group, and QR code. Medications and allergies are never printed physically on the card to prevent stale data hazards.
+        </span>
+      </p>
 
       {/* Step 1: Category Selection (All Off by Default) */}
       <Card className="border shadow-sm">
@@ -719,9 +708,14 @@ export function EmergencyCardManager() {
               </Button>
             </div>
 
-            <p className="text-xs text-gray-600">
-              Standard credit-card size (3.375&quot; x 2.125&quot;). Print on heavy paper or cardstock to carry in your wallet.
-            </p>
+            <div className="space-y-1">
+              <p className="text-xs text-gray-600">
+                Standard credit-card size (3.375&quot; x 2.125&quot;). Print on heavy paper or cardstock to carry in your wallet.
+              </p>
+              <p className="text-[11px] text-gray-500 leading-relaxed">
+                <strong className="text-gray-700">Wallet Card Privacy:</strong> The printable card includes ONLY your Name, Blood Group, and QR code. Medications and allergies are never printed physically on the card to prevent stale data hazards.
+              </p>
+            </div>
 
             {/* Standard Printable Card Canvas */}
             <div
