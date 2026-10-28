@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { fetchLiveDistrictHealthNews } from "@/lib/advisories/news-scanner";
+import { resolveIndianLocality } from "@/lib/advisories/pincode-resolver";
 
 export async function GET(request: Request) {
   try {
@@ -15,12 +16,17 @@ export async function GET(request: Request) {
     }
 
     const { searchParams } = new URL(request.url);
-    const district = searchParams.get("district") || "Indore";
+    const rawDistrict = searchParams.get("district") || "Indore";
+    const resolved = resolveIndianLocality(rawDistrict);
 
-    const articles = await fetchLiveDistrictHealthNews(district);
+    const articles = await fetchLiveDistrictHealthNews(resolved.district || rawDistrict);
 
     return NextResponse.json({
-      district,
+      district: resolved.district,
+      city: resolved.city,
+      state: resolved.state,
+      pincode: resolved.pincode,
+      displayName: resolved.displayName,
       count: articles.length,
       articles,
       source: "Google News RSS / Regional Media Digest",
