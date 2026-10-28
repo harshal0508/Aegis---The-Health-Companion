@@ -8,14 +8,16 @@ import {
   FolderOpen,
   ShieldAlert,
   User,
+  Bell,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-// Bottom navigation order is fixed per design spec:
-// Home → Summary → Documents → Emergency → Profile
+// Bottom navigation items matching MedAnchor pillars:
+// Home → Summary → Alerts → Documents → Emergency → Profile
 const NAV_ITEMS = [
   { href: "/home", label: "Home", icon: Home },
   { href: "/summary", label: "Summary", icon: FileText },
+  { href: "/advisories", label: "Alerts", icon: Bell },
   { href: "/documents", label: "Documents", icon: FolderOpen },
   { href: "/emergency", label: "Emergency", icon: ShieldAlert },
   { href: "/profile", label: "Profile", icon: User },
@@ -38,7 +40,7 @@ export function BottomNav() {
               key={href}
               href={href}
               className={cn(
-                "flex flex-1 flex-col items-center justify-center gap-1 text-[13px] font-medium transition-colors",
+                "flex flex-1 flex-col items-center justify-center gap-1 text-[11px] sm:text-xs font-medium transition-colors",
                 isActive
                   ? "text-teal-600"
                   : "text-gray-400 hover:text-gray-600"

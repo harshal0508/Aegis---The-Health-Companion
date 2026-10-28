@@ -98,7 +98,7 @@ export function OnboardingForm() {
         <div className="space-y-4 rounded-xl border bg-gray-50 p-5 text-base leading-relaxed text-gray-700">
           <p className="font-semibold text-gray-900">Before you continue</p>
           <p>
-            MedRecord stores your personal health information — including
+            MedAnchor stores your personal health information — including
             medications, conditions, and documents you upload — securely in your
             account. <strong>Only you can see your records.</strong>
           </p>
@@ -122,7 +122,7 @@ export function OnboardingForm() {
             </li>
             <li className="flex gap-2">
               <span className="mt-0.5 text-amber-600">!</span>
-              MedRecord is a personal record tool, not a clinical service. It
+              MedAnchor is a personal record tool, not a clinical service. It
               does not provide medical guidance of any kind.
             </li>
           </ul>

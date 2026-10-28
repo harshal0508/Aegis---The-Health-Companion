@@ -3,11 +3,11 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: {
-    default: "MedRecord",
-    template: "%s | MedRecord",
+    default: "MedAnchor",
+    template: "%s | MedAnchor",
   },
   description:
-    "Your personal health records, owned by you. Securely store and access your medical history.",
+    "MedAnchor — Grounded Clinical Document Intelligence for Emergency Care & Advisories. Paper records, verified by the patient, ready when emergencies strike.",
   // Prevent search engines from indexing health data pages
   robots: { index: false, follow: false },
 };

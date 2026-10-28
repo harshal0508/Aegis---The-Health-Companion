@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { EmergencyCardManager } from "@/components/emergency/EmergencyCardManager";
 
 export const metadata: Metadata = {
-  title: "Emergency Card | MedRecord",
+  title: "Emergency Card | MedAnchor",
   description: "Secure, patient-controlled emergency medical profile for first responders",
 };
 

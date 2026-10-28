@@ -41,3 +41,4 @@ public/workbox-*.js
 
 # OCR traineddata files
 *.traineddata
+*.traineddata.gz

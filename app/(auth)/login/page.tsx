@@ -12,16 +12,16 @@ export default function LoginPage() {
         {/* Text logo — no graphic, clinical feel */}
         <div className="text-center">
           <span className="text-3xl font-bold tracking-tight text-teal-600">
-            MedRecord
+            MedAnchor
           </span>
           <p className="mt-2 text-base text-muted-foreground">
-            Your health records, owned by you
+            Grounded clinical document intelligence
           </p>
         </div>
 
         <div className="rounded-xl border bg-white p-6 shadow-sm">
           <h1 className="mb-6 text-xl font-semibold text-gray-900">
-            Welcome to MedRecord
+            Welcome to MedAnchor
           </h1>
           <LoginForm />
         </div>

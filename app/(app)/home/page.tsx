@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Plus, FileText, ChevronRight, Upload, ShieldCheck, Clock, Calendar } from "lucide-react";
+import { Plus, FileText, ChevronRight, Upload, ShieldCheck, Clock, Calendar, Bell, MapPin, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -36,12 +36,16 @@ export default async function HomePage() {
     .order("created_at", { ascending: false })
     .limit(3);
 
-  // Fetch critical items counts for Emergency Readiness
+  // Fetch critical items counts for Emergency Readiness & Personalized Advisories
   const { data: confirmedItems } = await supabase
     .from("items")
-    .select("id, category")
+    .select("id, category, value")
     .eq("user_id", user.id)
     .eq("status", "confirmed");
+
+  const confirmedConditions = (confirmedItems || []).filter(
+    (i) => i.category === "condition" || i.category === "allergy"
+  );
 
   const firstName = profile.full_name.split(" ")[0];
 
@@ -86,6 +90,40 @@ export default async function HomePage() {
           <Link href="/emergency">
             <Button variant="outline" size="sm" className="bg-white border-teal-200 text-teal-700 hover:bg-teal-50 text-xs">
               View Emergency Card
+            </Button>
+          </Link>
+        </CardContent>
+      </Card>
+
+      {/* Local Health Advisories & Outbreak Intelligence (Tier 04) */}
+      <Card className="border-amber-200 bg-amber-50/40 shadow-sm">
+        <CardContent className="p-5 flex items-start sm:items-center justify-between gap-4 flex-col sm:flex-row">
+          <div className="flex items-start gap-3.5">
+            <div className="h-10 w-10 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center flex-shrink-0 mt-0.5 sm:mt-0">
+              <Bell className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-semibold text-gray-900">
+                  Local Health Advisories
+                </h2>
+                <Badge className="bg-rose-600 text-white text-[10px] uppercase font-bold py-0">
+                  Active Notice
+                </Badge>
+              </div>
+              <p className="text-xs text-gray-600 mt-1">
+                Seasonal Dengue spike &amp; viral respiratory notices active in your region (Bhopal / Central India).
+                {confirmedConditions.length > 0 && (
+                  <span className="text-teal-700 font-medium">
+                    {" "}Matched with precautions for your confirmed {confirmedConditions[0].value}.
+                  </span>
+                )}
+              </p>
+            </div>
+          </div>
+          <Link href="/advisories">
+            <Button size="sm" className="bg-amber-600 hover:bg-amber-700 text-white text-xs whitespace-nowrap">
+              View Outbreaks &amp; Precautions
             </Button>
           </Link>
         </CardContent>

@@ -224,7 +224,7 @@ export function EmergencyCardManager() {
     if (!qrDataUrl) return;
     const a = document.createElement("a");
     a.href = qrDataUrl;
-    a.download = `medrecord-emergency-qr-${Date.now()}.png`;
+    a.download = `medanchor-emergency-qr-${Date.now()}.png`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -769,7 +769,7 @@ export function EmergencyCardManager() {
 
               <div className="border-t pt-1 flex items-center justify-between text-[8px] text-gray-500 font-semibold uppercase tracking-wider">
                 <span>Scan QR for current medical info</span>
-                <span>MedRecord</span>
+                <span>MedAnchor</span>
               </div>
             </div>
 
