@@ -11,10 +11,9 @@ import {
   Activity,
   HeartPulse,
   Pill,
-  Sparkles,
+  FolderOpen,
   ShieldCheck,
   CheckCircle2,
-  ArrowRight,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { formatClinicalDate } from "@/lib/utils";
@@ -35,7 +34,7 @@ export default async function HomePage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("full_name")
+    .select("full_name, blood_group, emergency_contact_name, emergency_contact_phone")
     .single();
 
   if (!profile) redirect("/onboarding");
@@ -60,23 +59,19 @@ export default async function HomePage() {
   const conditionsCount = (confirmedItems || []).filter((i) => i.category === "condition").length;
 
   const firstName = profile.full_name ? profile.full_name.split(" ")[0] : "Patient";
+  const hasIceContact = Boolean(profile.emergency_contact_phone || profile.emergency_contact_name);
 
   return (
     <div className="space-y-6">
-      {/* Apple Health Greeting Header */}
+      {/* Clean Greeting Header (removed vault/encryption badge) */}
       <div className="flex items-center justify-between">
         <div>
-          <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
-            <span>Clinical Vault Active</span>
-            <span>•</span>
-            <span className="flex items-center gap-1 text-teal-700 font-semibold">
-              <span className="h-1.5 w-1.5 rounded-full bg-teal-500 animate-pulse" />
-              Local Encryption Ready
-            </span>
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight mt-0.5">
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
             Good evening, {firstName}
           </h1>
+          <p className="text-xs text-slate-500 font-medium mt-0.5">
+            Your patient-owned health records and emergency readiness
+          </p>
         </div>
 
         <Link
@@ -177,7 +172,7 @@ export default async function HomePage() {
         </div>
       </div>
 
-      {/* 2. Emergency Medical ID Card (Enlarged & Centered across full container) */}
+      {/* 2. Emergency Medical ID Card (Helpful, Patient-Focused Emergency Content) */}
       <Link href="/emergency" className="block group">
         <div className="apple-card p-5 sm:p-6 bg-gradient-to-r from-rose-500 via-rose-600 to-rose-700 text-white shadow-md relative overflow-hidden group-hover:shadow-lg transition-all">
           {/* Subtle background emergency cross watermark */}
@@ -197,15 +192,18 @@ export default async function HomePage() {
                   </h2>
                   <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 animate-ping shrink-0" />
                 </div>
-                <p className="text-xs sm:text-sm text-rose-100 mt-1 font-medium">
-                  Offline QR Ready • Paramedic First Responder Access • Zero Login Required
+                <p className="text-xs sm:text-sm text-rose-100 mt-1 font-medium max-w-xl leading-relaxed">
+                  Instant scan for paramedics and ER doctors — shows your blood group, confirmed allergies, and emergency contact phone without requiring a login.
                 </p>
-                <div className="flex items-center gap-2 mt-2">
-                  <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 bg-white/20 rounded-md text-white">
-                    Emergency First-Response
+                <div className="flex flex-wrap items-center gap-2 mt-2.5">
+                  <span className="text-[10px] font-semibold tracking-wide px-2.5 py-0.5 bg-white/20 rounded-full text-white backdrop-blur-xs">
+                    Blood Group: {profile.blood_group || "Not set"}
                   </span>
-                  <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 bg-white/20 rounded-md text-white">
-                    Public Fast-Track
+                  <span className="text-[10px] font-semibold tracking-wide px-2.5 py-0.5 bg-white/20 rounded-full text-white backdrop-blur-xs">
+                    {allergiesCount > 0 ? `${allergiesCount} Critical Allergy Alert` : "No Known Allergies"}
+                  </span>
+                  <span className="text-[10px] font-semibold tracking-wide px-2.5 py-0.5 bg-white/20 rounded-full text-white backdrop-blur-xs">
+                    {hasIceContact ? "ICE Contact Active" : "Add Emergency Contact"}
                   </span>
                 </div>
               </div>
@@ -221,7 +219,7 @@ export default async function HomePage() {
         </div>
       </Link>
 
-      {/* 3. The 4 Quick Action Boxes (in a 4-column row on desktop, 2-col on mobile) */}
+      {/* 3. The 4 Quick Action Boxes (Renamed Scan Provenance to Medical Records) */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
         <Link
           href="/documents/upload"
@@ -279,14 +277,14 @@ export default async function HomePage() {
           className="apple-card apple-card-hover p-4 sm:p-5 flex flex-col justify-between group"
         >
           <div className="h-10 w-10 rounded-xl bg-purple-50 text-purple-700 border border-purple-100 flex items-center justify-center group-hover:scale-105 transition-transform">
-            <Sparkles className="h-5 w-5" />
+            <FolderOpen className="h-5 w-5" />
           </div>
           <div className="mt-4">
             <span className="text-xs sm:text-sm font-bold text-slate-900 block group-hover:text-purple-700 transition-colors">
-              Scan Provenance
+              Medical Records
             </span>
             <span className="text-[11px] text-slate-500 font-medium mt-0.5 block">
-              Bounding Box Viewer
+              Original Scans &amp; Reports
             </span>
           </div>
         </Link>
