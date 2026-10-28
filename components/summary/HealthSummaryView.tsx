@@ -110,6 +110,7 @@ export function HealthSummaryView() {
   const [items, setItems] = useState<SummaryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedCategoryTab, setSelectedCategoryTab] = useState<string>("all");
 
   // Interaction states
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
@@ -280,23 +281,48 @@ export function HealthSummaryView() {
   const unconfirmedCount = items.filter((i) => i.status !== "confirmed").length;
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8 space-y-8">
+    <div className="space-y-4 pt-1">
       {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b pb-6">
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Health Summary</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Confirmed medical records & extracted document findings
+          <h1 className="text-xl font-bold tracking-tight text-slate-900">Health Summary</h1>
+          <p className="text-[11px] text-slate-500 font-medium">
+            {confirmedCount} confirmed • {unconfirmedCount} pending
           </p>
         </div>
 
         <Button
+          size="sm"
           onClick={() => setIsAdding(!isAdding)}
-          className="bg-teal-600 hover:bg-teal-700 text-white shadow-sm flex items-center gap-1.5 self-start sm:self-auto"
+          className="bg-teal-600 hover:bg-teal-700 text-white rounded-full text-xs font-semibold h-8 px-3 gap-1 shadow-xs"
         >
-          <Plus className="h-4 w-4" />
-          Add Manual Entry
+          <Plus className="h-3.5 w-3.5" />
+          <span>Add</span>
         </Button>
+      </div>
+
+      {/* Horizontal Apple Health Category Selector Pills */}
+      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 text-xs select-none">
+        {[
+          { id: "all", label: "All Records" },
+          { id: "medication", label: "Meds" },
+          { id: "allergy", label: "Allergies" },
+          { id: "condition", label: "Conditions" },
+          { id: "lab", label: "Labs" },
+          { id: "surgery", label: "Procedures" },
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setSelectedCategoryTab(tab.id)}
+            className={`px-3 py-1 rounded-full font-semibold transition-all whitespace-nowrap text-xs ${
+              selectedCategoryTab === tab.id
+                ? "bg-slate-900 text-white shadow-xs"
+                : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200/80"
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
 
       {/* Manual Entry Form */}
@@ -402,29 +428,32 @@ export function HealthSummaryView() {
       )}
 
       {/* Clinical Sections */}
-      <div className="space-y-6">
-        {Object.keys(CATEGORY_CONFIG).map((categoryKey) => {
-          const config = CATEGORY_CONFIG[categoryKey];
-          const categoryItems = items.filter((i) => i.category === categoryKey);
-          const Icon = config.icon;
+      <div className="space-y-4">
+        {Object.keys(CATEGORY_CONFIG)
+          .filter(
+            (categoryKey) =>
+              selectedCategoryTab === "all" || categoryKey === selectedCategoryTab
+          )
+          .map((categoryKey) => {
+            const config = CATEGORY_CONFIG[categoryKey];
+            const categoryItems = items.filter((i) => i.category === categoryKey);
+            const Icon = config.icon;
 
-          return (
-            <Card key={categoryKey} className="border shadow-sm overflow-hidden">
-              <CardHeader className="bg-gray-50/70 border-b py-3 px-5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <div className={`p-1.5 rounded-lg border ${config.color}`}>
-                      <Icon className="h-4 w-4" />
+            return (
+              <div key={categoryKey} className="apple-card overflow-hidden">
+                <div className="bg-slate-50/80 border-b border-slate-100 py-2.5 px-4 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className={`p-1 rounded-md border ${config.color}`}>
+                      <Icon className="h-3.5 w-3.5" />
                     </div>
-                    <CardTitle className="text-base font-semibold text-gray-900">
+                    <h3 className="text-xs font-bold text-slate-800 tracking-tight">
                       {config.label}
-                    </CardTitle>
+                    </h3>
                   </div>
-                  <span className="text-xs text-muted-foreground font-mono">
+                  <span className="text-[10px] text-slate-400 font-mono font-medium">
                     {categoryItems.length} {categoryItems.length === 1 ? "entry" : "entries"}
                   </span>
                 </div>
-              </CardHeader>
 
               <CardContent className="p-0 divide-y divide-gray-100">
                 {categoryItems.length === 0 ? (
@@ -658,8 +687,8 @@ export function HealthSummaryView() {
                     );
                   })
                 )}
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           );
         })}
       </div>

@@ -29,21 +29,26 @@ export default async function ProfilePage() {
   if (!profile) redirect("/onboarding");
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8 space-y-6">
+    <div className="space-y-4 pt-1">
       <div>
-        <h1 className="text-2xl font-semibold text-gray-900">Profile</h1>
-        <p className="mt-1 text-base text-muted-foreground">
-          Your personal information
+        <h1 className="text-xl font-bold tracking-tight text-slate-900">Profile</h1>
+        <p className="text-[11px] text-slate-500 font-medium">
+          Personal identification &amp; emergency settings
         </p>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">{profile.full_name}</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <ProfileRow label="Email" value={user.email ?? "—"} />
-          <Separator />
+      <div className="apple-card p-4 space-y-3">
+        <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
+          <div className="h-12 w-12 rounded-full bg-teal-100 text-teal-800 font-bold text-base flex items-center justify-center border-2 border-teal-200/80">
+            {profile.full_name ? profile.full_name.charAt(0).toUpperCase() : "P"}
+          </div>
+          <div>
+            <h2 className="text-base font-bold text-slate-900">{profile.full_name}</h2>
+            <p className="text-xs text-slate-500">{user.email ?? "—"}</p>
+          </div>
+        </div>
+
+        <div className="space-y-2 text-xs">
           <ProfileRow
             label="Date of birth"
             value={profile.dob ?? "Not provided"}
@@ -53,40 +58,41 @@ export default async function ProfilePage() {
             value={profile.blood_group ?? "Not provided"}
           />
           {process.env.NODE_ENV === "development" && (
-            <>
-              <Separator />
-              <ProfileRow
-                label="Account ID (Dev Only)"
-                value={user.id}
-              />
-            </>
+            <ProfileRow
+              label="Account ID (Dev)"
+              value={user.id.slice(0, 8) + "..."}
+            />
           )}
-          <Separator />
-          <p className="text-sm font-medium text-gray-700">Emergency contact</p>
-          <ProfileRow
-            label="Name"
-            value={profile.emergency_contact_name ?? "Not provided"}
-          />
-          <ProfileRow
-            label="Phone"
-            value={profile.emergency_contact_phone ?? "Not provided"}
-          />
-        </CardContent>
-      </Card>
+        </div>
 
-      <Card className="hover:border-teal-300 transition-colors">
-        <CardContent className="p-4">
-          <Link
-            href="/about"
-            className="flex items-center justify-between text-sm font-semibold text-teal-800 hover:text-teal-900"
-          >
-            <span>What this app is &amp; isn&apos;t (Clinical Scope)</span>
-            <span className="text-gray-400 font-normal">→</span>
-          </Link>
-        </CardContent>
-      </Card>
+        <div className="pt-2 border-t border-slate-100">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+            Emergency ICE Contact
+          </p>
+          <div className="space-y-1.5 text-xs">
+            <ProfileRow
+              label="Contact Name"
+              value={profile.emergency_contact_name ?? "Not provided"}
+            />
+            <ProfileRow
+              label="Contact Phone"
+              value={profile.emergency_contact_phone ?? "Not provided"}
+            />
+          </div>
+        </div>
+      </div>
 
-      <div className="pt-2">
+      <div className="apple-card p-3.5 hover:border-teal-300 transition-colors">
+        <Link
+          href="/about"
+          className="flex items-center justify-between text-xs font-semibold text-teal-800 hover:text-teal-900"
+        >
+          <span>What this app is &amp; isn&apos;t (Clinical Scope)</span>
+          <span className="text-slate-400 font-normal">→</span>
+        </Link>
+      </div>
+
+      <div className="pt-1">
         <SignOutButton />
       </div>
     </div>

@@ -259,7 +259,7 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
   const typeLabel = TYPE_LABELS[document.doc_type] || document.doc_type;
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
+    <div className="space-y-4 pt-1">
       {/* Top action & navigation bar */}
       <div className="flex flex-wrap items-center justify-between gap-4 border-b pb-4">
         <div className="flex items-center gap-3">

@@ -27,7 +27,7 @@ export default async function AdvisoriesPage() {
     .in("category", ["condition", "allergy"]);
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8 space-y-6">
+    <div className="space-y-4 pt-1">
       <AdvisoriesHub confirmedItems={confirmedItems || []} />
     </div>
   );

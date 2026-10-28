@@ -1,3 +1,5 @@
+const colors = require("tailwindcss/colors");
+
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   darkMode: ["class"],
@@ -51,11 +53,8 @@ module.exports = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
-        // Teal accent for primary actions per design system
-        teal: {
-          600: "#0d9488",
-          700: "#0f766e",
-        },
+        teal: colors.teal,
+        slate: colors.slate,
       },
       borderRadius: {
         lg: "var(--radius)",

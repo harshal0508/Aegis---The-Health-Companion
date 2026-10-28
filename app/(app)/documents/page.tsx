@@ -39,19 +39,20 @@ export default async function DocumentsPage() {
   }));
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8 space-y-6">
+    <div className="space-y-4 pt-1">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Documents</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Your uploaded records, discharge summaries, and prescriptions
+          <h1 className="text-xl font-bold tracking-tight text-slate-900">
+            Medical Records
+          </h1>
+          <p className="text-[11px] text-slate-500 font-medium">
+            Scans, discharge summaries, and prescriptions
           </p>
         </div>
         <Link href="/documents/upload">
-          <Button className="bg-teal-600 hover:bg-teal-700 text-white gap-1.5 h-10 shadow-sm">
-            <Plus className="h-4 w-4" />
-            <span className="hidden sm:inline">Add document</span>
-            <span className="sm:hidden">Upload</span>
+          <Button size="sm" className="bg-teal-600 hover:bg-teal-700 text-white gap-1.5 h-8 px-3 rounded-full text-xs font-semibold shadow-xs">
+            <Plus className="h-3.5 w-3.5" />
+            <span>Upload</span>
           </Button>
         </Link>
       </div>
