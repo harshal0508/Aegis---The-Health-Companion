@@ -704,14 +704,14 @@ export function AdvisoriesHub({
       )}
 
       {/* 4. Assistive Clinical Boundary Notice */}
-      <div className="apple-card p-4 sm:p-5 bg-slate-50/80 border border-slate-200/80 text-xs text-slate-600 max-w-2xl mx-auto rounded-2xl shadow-2xs">
+      <div className="apple-card p-4 sm:p-5 bg-slate-50/80 border border-slate-200/80 text-xs text-slate-600 w-full rounded-2xl shadow-2xs">
         <div className="flex items-start gap-3">
           <Info className="h-4 w-4 text-slate-500 shrink-0 mt-0.5" />
           <div className="space-y-1">
             <span className="font-bold text-slate-800 text-xs block">
               Assistive Public Health Notice
             </span>
-            <p className="leading-relaxed text-slate-500 text-[11px]">
+            <p className="leading-relaxed text-slate-500 text-xs">
               MedAnchor organizes public surveillance reports and official guideline references. This service does not provide clinical diagnoses, evaluate active symptoms, or recommend treatment changes. Always consult your treating physician.
             </p>
           </div>
