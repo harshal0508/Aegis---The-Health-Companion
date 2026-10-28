@@ -430,9 +430,10 @@ describe("Phase 3 Second-Reader OCR Cross-Check", () => {
       const cond = {
         category: "condition",
         value: "Type 2 Diabetes Mellitus",
-        quote: "Type 2 Diabetes Mellitus",
+        quote: "Type 2 Diabetes Mellitus (ICD-10: E11.9)",
       };
       const checkCond = crossCheckItem(cond, tesseractResult);
+      console.log("CHECK COND (with ICD):", checkCond.state, "boxes:", checkCond.boundingBoxes);
       expect(checkCond.state).toBe("agree");
       expect(checkCond.missingTokens).toHaveLength(0);
       expect(checkCond.boundingBoxes && checkCond.boundingBoxes.length > 0).toBe(true);

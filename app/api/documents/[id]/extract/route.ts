@@ -195,23 +195,20 @@ export async function POST(
       }
 
       if (secondaryOcrResult) {
-        // Update bounding boxes for all existing items on this page (even if confirmed or omitted by Gemini)
+        // Update bounding boxes and cross-checks for all existing items on this page (even if confirmed or omitted by Gemini)
         const itemsToUpdate = (existingDocItems || []).filter(
           (item) => item.page_id === page.id || (!item.page_id && item.quote)
         );
 
         for (const existingItem of itemsToUpdate) {
           if (existingItem.quote) {
-            const boxes = locateQuoteBoundingBoxes(existingItem.quote, secondaryOcrResult);
-            const currentPayload = (existingItem.ocr_check as any) || { state: "agree" };
+            const check = crossCheckItem(existingItem, secondaryOcrResult);
             await supabase
               .from("items")
               .update({
                 page_id: page.id,
-                ocr_check: {
-                  ...currentPayload,
-                  bounding_boxes: boxes || null,
-                },
+                ocr_check: check.ocrCheckPayload,
+                review_reason: check.state === "disagree" ? (check.reviewReason || "OCR disagreement") : null,
               })
               .eq("id", existingItem.id);
           }
@@ -301,6 +298,7 @@ export async function POST(
                 .from("items")
                 .update({
                   ocr_check: row.ocr_check,
+                  review_reason: row.review_reason,
                   quote: row.quote,
                   page_id: row.page_id,
                 })
