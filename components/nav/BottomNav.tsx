@@ -27,10 +27,11 @@ export function BottomNav() {
   const pathname = usePathname();
 
   return (
-    <div className="fixed bottom-2 left-3 right-3 sm:absolute sm:bottom-4 sm:left-4 sm:right-4 z-50 pointer-events-auto">
+    // Only visible on mobile/tablet viewports (< md). Desktop uses the top AppHeader.
+    <div className="md:hidden fixed bottom-3 left-3 right-3 z-50 pointer-events-auto">
       <nav
-        className="glass-dock border border-slate-200/80 shadow-[0_12px_36px_-6px_rgba(15,23,42,0.12)] rounded-2xl sm:rounded-3xl p-1.5 flex items-center justify-between"
-        aria-label="Main navigation"
+        className="glass-dock border border-slate-200/90 shadow-[0_12px_36px_-6px_rgba(15,23,42,0.15)] rounded-2xl px-2 py-1.5 flex items-center justify-between"
+        aria-label="Mobile navigation"
       >
         {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
           const isActive = pathname === href || (href !== "/home" && pathname.startsWith(href + "/"));
@@ -39,16 +40,16 @@ export function BottomNav() {
               key={href}
               href={href}
               className={cn(
-                "relative flex flex-1 flex-col items-center justify-center py-1.5 px-1 rounded-xl sm:rounded-2xl text-[10px] sm:text-[11px] font-medium transition-all duration-200",
+                "relative flex flex-1 flex-col items-center justify-center py-1.5 px-1 rounded-xl text-[10px] font-medium transition-all duration-200",
                 isActive
-                  ? "bg-teal-50/90 text-teal-800 font-semibold shadow-2xs"
-                  : "text-slate-400 hover:text-slate-700 hover:bg-slate-50/60"
+                  ? "bg-teal-50 text-teal-800 font-semibold shadow-2xs"
+                  : "text-slate-400 hover:text-slate-700"
               )}
               aria-current={isActive ? "page" : undefined}
             >
               <Icon
                 className={cn(
-                  "h-4 w-4 sm:h-[18px] sm:w-[18px] transition-transform duration-200",
+                  "h-4 w-4 transition-transform duration-200",
                   isActive
                     ? "text-teal-700 scale-110"
                     : "text-slate-400"
