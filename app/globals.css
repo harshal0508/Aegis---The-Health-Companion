@@ -1,17 +1,19 @@
+@import url('https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400;1,600&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
-    /* Light theme only — no dark mode per design spec */
-    --background: 0 0% 100%;
+    /* Light theme only — clean clinical palette */
+    --background: 210 40% 98%;
     --foreground: 222.2 84% 4.9%;
     --card: 0 0% 100%;
     --card-foreground: 222.2 84% 4.9%;
     --popover: 0 0% 100%;
     --popover-foreground: 222.2 84% 4.9%;
-    /* Primary = teal-600 (#0d9488) */
+    /* Primary = Clinical Deep Teal */
     --primary: 174 75% 31%;
     --primary-foreground: 0 0% 100%;
     --secondary: 210 40% 96.1%;
@@ -25,7 +27,7 @@
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
     --ring: 174 75% 31%;
-    --radius: 0.75rem;
+    --radius: 0.875rem;
   }
 
   * {
@@ -34,9 +36,10 @@
 
   body {
     @apply bg-[#F8FAFC] text-slate-900 antialiased selection:bg-teal-100 selection:text-teal-900;
-    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI", Roboto, system-ui, sans-serif;
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     font-size: 15px;
-    line-height: 1.5;
+    line-height: 1.55;
+    letter-spacing: -0.012em;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
@@ -59,21 +62,31 @@
   }
 
   .glass-header {
-    background-color: rgba(255, 255, 255, 0.85);
+    background-color: rgba(255, 255, 255, 0.88);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
   }
 
   .glass-dock {
-    background-color: rgba(255, 255, 255, 0.90);
+    background-color: rgba(255, 255, 255, 0.92);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
   }
 
   .apple-card {
     background-color: #ffffff;
-    border-radius: 1.25rem;
-    border: 1px solid rgba(226, 232, 240, 0.8);
-    box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.04), 0 2px 6px -1px rgba(15, 23, 42, 0.02);
+    border-radius: 1rem;
+    border: 1px solid rgba(226, 232, 240, 0.85);
+    box-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.02), 0 8px 24px -4px rgba(15, 23, 42, 0.04);
+  }
+
+  .apple-card-hover {
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .apple-card-hover:hover {
+    border-color: rgba(13, 148, 136, 0.35);
+    box-shadow: 0 4px 20px -2px rgba(13, 148, 136, 0.07), 0 2px 8px -2px rgba(15, 23, 42, 0.03);
+    transform: translateY(-1px);
   }
 }

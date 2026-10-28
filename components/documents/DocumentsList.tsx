@@ -123,16 +123,16 @@ export function DocumentsList({
             />
           </div>
 
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
-            <Filter className="h-3.5 w-3.5 text-muted-foreground mr-1 flex-shrink-0" />
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs select-none">
+            <Filter className="h-3.5 w-3.5 text-slate-400 mr-1 flex-shrink-0" />
             {categories.map((cat) => (
               <button
                 key={cat.id}
                 onClick={() => setSelectedCategory(cat.id)}
-                className={`px-3 py-1 rounded-full font-medium transition-colors whitespace-nowrap ${
+                className={`px-3 py-1 rounded-full font-semibold transition-all whitespace-nowrap text-xs ${
                   selectedCategory === cat.id
-                    ? "bg-teal-600 text-white shadow-sm"
-                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    ? "bg-slate-900 text-white shadow-xs"
+                    : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200/80"
                 }`}
               >
                 {cat.label}
@@ -144,25 +144,25 @@ export function DocumentsList({
 
       {/* Document List */}
       {filteredDocs.length === 0 ? (
-        <div className="border rounded-2xl bg-white p-8 text-center space-y-4 shadow-sm">
+        <div className="apple-card p-8 text-center space-y-4">
           <div className="h-12 w-12 rounded-full bg-teal-50 text-teal-600 flex items-center justify-center mx-auto">
             <FileText className="h-6 w-6" />
           </div>
           <div className="max-w-sm mx-auto">
-            <h2 className="text-lg font-semibold text-gray-900">
+            <h2 className="text-base font-bold text-slate-900">
               {initialDocuments.length === 0
                 ? "No medical documents yet"
                 : "No matching records found"}
             </h2>
-            <p className="text-sm text-muted-foreground mt-1">
+            <p className="text-xs text-slate-500 mt-1 leading-relaxed">
               {initialDocuments.length === 0
                 ? "Upload discharge summaries, lab tests, prescriptions, and scans to keep your health records organized."
                 : "Try adjusting your filter or search keywords."}
             </p>
           </div>
           <Link href="/documents/upload" className="inline-block">
-            <Button className="bg-teal-600 hover:bg-teal-700 text-white gap-2">
-              <Upload className="h-4 w-4" />
+            <Button size="sm" className="bg-teal-600 hover:bg-teal-700 text-white gap-1.5 rounded-full text-xs font-semibold px-4 shadow-xs">
+              <Upload className="h-3.5 w-3.5" />
               Upload Document
             </Button>
           </Link>
@@ -179,7 +179,7 @@ export function DocumentsList({
                 href={`/documents/${doc.id}`}
                 className="block group"
               >
-                <div className="border rounded-xl p-4 bg-white hover:border-teal-400 hover:shadow-md transition-all flex items-center justify-between gap-4">
+                <div className="apple-card apple-card-hover p-4 flex items-center justify-between gap-4">
                   <div className="flex items-center gap-3.5 min-w-0">
                     <div
                       className={`h-11 w-11 rounded-xl flex items-center justify-center flex-shrink-0 border ${config.color}`}
@@ -188,7 +188,7 @@ export function DocumentsList({
                     </div>
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
-                        <h3 className="font-semibold text-base text-gray-900 truncate group-hover:text-teal-700 transition-colors">
+                        <h3 className="font-bold text-sm text-slate-900 truncate group-hover:text-teal-700 transition-colors">
                           {config.label}
                         </h3>
                         <Badge

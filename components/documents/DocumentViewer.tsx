@@ -679,7 +679,7 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
                             )
                           )}
                         </div>
-                        <p className="italic">&quot;{item.quote}&quot;</p>
+                        <p className="italic font-serif text-slate-800 text-[13px] leading-relaxed">&quot;{item.quote}&quot;</p>
                       </div>
                     )}
 
