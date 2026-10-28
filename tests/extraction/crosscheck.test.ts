@@ -398,5 +398,44 @@ describe("Phase 3 Second-Reader OCR Cross-Check", () => {
       expect(reviewReason).toBe("OCR disagreement: 150");
       expect(check.ocrCheckPayload.state).toBe("disagree");
     });
+
+    it("verifies Doc 2 (Apollo Health City) items against cached Tesseract output", async () => {
+      const fs = await import("fs");
+      const path = await import("path");
+      const cachePath = path.resolve("test-files/cache/tesseract/b83f6204aafbdad00d0f79ab685d50f99a49464da556a6b1bbbb0331e7908d14.json");
+      if (!fs.existsSync(cachePath)) return;
+
+      const tesseractResult = JSON.parse(fs.readFileSync(cachePath, "utf-8"));
+
+      const sita = {
+        category: "medication",
+        value: "Sitagliptin 100mg PO Daily",
+        quote: "Sitagliptin 100mg PO Daily",
+      };
+      const checkSita = crossCheckItem(sita, tesseractResult);
+      expect(checkSita.state).toBe("agree");
+      expect(checkSita.missingTokens).toHaveLength(0);
+      expect(checkSita.boundingBoxes && checkSita.boundingBoxes.length > 0).toBe(true);
+
+      const met = {
+        category: "medication",
+        value: "Metformin 500mg PO BID",
+        quote: "Metformin 500mg PO BID",
+      };
+      const checkMet = crossCheckItem(met, tesseractResult);
+      expect(checkMet.state).toBe("agree");
+      expect(checkMet.missingTokens).toHaveLength(0);
+      expect(checkMet.boundingBoxes && checkMet.boundingBoxes.length > 0).toBe(true);
+
+      const cond = {
+        category: "condition",
+        value: "Type 2 Diabetes Mellitus",
+        quote: "Type 2 Diabetes Mellitus",
+      };
+      const checkCond = crossCheckItem(cond, tesseractResult);
+      expect(checkCond.state).toBe("agree");
+      expect(checkCond.missingTokens).toHaveLength(0);
+      expect(checkCond.boundingBoxes && checkCond.boundingBoxes.length > 0).toBe(true);
+    });
   });
 });

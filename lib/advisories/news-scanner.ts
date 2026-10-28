@@ -3,7 +3,7 @@
  * --------------------------------------
  * Queries live Google News RSS feeds for Indian districts and health keywords.
  * Returns verified headlines, publisher names, publication timestamps, and direct URLs.
- * Zero API keys required; runs on standard RSS/XML.
+ * Zero API keys required; runs on standard RSS/XML with strict clinical filtering.
  */
 
 export interface DistrictNewsArticle {
@@ -16,6 +16,14 @@ export interface DistrictNewsArticle {
   district: string;
 }
 
+// Strict whitelist: Article must explicitly reference an infectious or communicable health event
+const COMMUNICABLE_DISEASE_REGEX =
+  /\b(dengue|malaria|chikungunya|h1n1|swine\s+flu|flu|influenza|viral\s+fever|fever\s+cases|outbreak|epidemic|cases\s+surge|infection|cholera|typhoid|jaundice|hepatitis|measles|zika|nipah|leptospirosis|conjunctivitis)\b/i;
+
+// Strict blacklist: Eliminate hospital administrative scandals, animal sightings, police/crime reports
+const IRRELEVANT_CIVIC_REGEX =
+  /\b(snake|animal|leopard|dog|accident|crash|police|murder|theft|scam|corruption|brick|tender|stretcher|bribe|fire|arrest|fraud|protest|assault|dowry|bandage\s+row)\b/i;
+
 /**
  * Fetch and parse real news articles for a specific district and disease query.
  */
@@ -24,9 +32,9 @@ export async function fetchLiveDistrictHealthNews(
 ): Promise<DistrictNewsArticle[]> {
   try {
     const cleanDistrict = (district || "Indore").trim();
-    // Targeted query for communicable health events in that district
+    // Targeted query for communicable disease outbreaks — NO generic "hospital" keyword
     const query = encodeURIComponent(
-      `"${cleanDistrict}" (dengue OR malaria OR viral fever OR chikungunya OR outbreak OR hospital)`
+      `"${cleanDistrict}" (dengue OR malaria OR "viral fever" OR chikungunya OR H1N1 OR "swine flu" OR influenza OR "disease outbreak" OR "infection surge")`
     );
     const feedUrl = `https://news.google.com/rss/search?q=${query}&hl=en-IN&gl=IN&ceid=IN:en`;
 
@@ -35,7 +43,7 @@ export async function fetchLiveDistrictHealthNews(
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) MedAnchorHealthBot/1.0",
         Accept: "application/rss+xml, application/xml, text/xml",
       },
-      next: { revalidate: 3600 }, // Cache on server for 1 hour to prevent rate limits
+      cache: "no-store", // Always fetch fresh to avoid serving stale non-disease items
     });
 
     if (!res.ok) {
@@ -52,9 +60,9 @@ export async function fetchLiveDistrictHealthNews(
 }
 
 /**
- * Lightweight, zero-dependency XML parser for Google News RSS items.
+ * Zero-dependency XML parser for Google News RSS items with strict clinical relevance filtering.
  */
-function parseGoogleNewsRss(xml: string, district: string): DistrictNewsArticle[] {
+export function parseGoogleNewsRss(xml: string, district: string): DistrictNewsArticle[] {
   const articles: DistrictNewsArticle[] = [];
   const itemRegex = /<item>([\s\S]*?)<\/item>/gi;
   let match: RegExpExecArray | null;
@@ -68,13 +76,22 @@ function parseGoogleNewsRss(xml: string, district: string): DistrictNewsArticle[
     const sourceMatch = /<source[^>]*>(.*?)<\/source>/i.exec(itemXml);
 
     let rawTitle = titleMatch ? titleMatch[1] : "";
-    // Clean up CDATA or HTML entities
     rawTitle = rawTitle.replace(/<!\[CDATA\[(.*?)\]\]>/g, "$1").trim();
+
+    // 1. Blacklist Check: Drop animal sightings, crime, hospital administration scandals
+    if (IRRELEVANT_CIVIC_REGEX.test(rawTitle)) {
+      continue;
+    }
+
+    // 2. Whitelist Check: Must directly discuss an infectious disease, viral surge, or epidemic
+    if (!COMMUNICABLE_DISEASE_REGEX.test(rawTitle)) {
+      continue;
+    }
 
     let source = sourceMatch ? sourceMatch[1] : "Local Press";
     source = source.replace(/<!\[CDATA\[(.*?)\]\]>/g, "$1").trim();
 
-    // Often Google News appends " - Publisher" at the end of the title
+    // Clean up trailing " - Publisher" from Google News title
     if (rawTitle.includes(" - ")) {
       const parts = rawTitle.split(" - ");
       if (parts.length > 1) {
@@ -95,7 +112,7 @@ function parseGoogleNewsRss(xml: string, district: string): DistrictNewsArticle[
         source: decodeXmlEntities(source),
         url,
         publishedAt,
-        snippet: `Reported by ${source} regarding health developments in ${district} area.`,
+        snippet: `Regional press report concerning communicable disease trends in the ${district} district.`,
         district,
       });
     }

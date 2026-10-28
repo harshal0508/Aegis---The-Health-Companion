@@ -1,13 +1,70 @@
 import { describe, it, expect } from "vitest";
-import { fetchLiveDistrictHealthNews } from "@/lib/advisories/news-scanner";
+import {
+  parseGoogleNewsRss,
+  fetchLiveDistrictHealthNews,
+} from "@/lib/advisories/news-scanner";
 
-describe("Live District News Scanner & RSS Ingestion", () => {
+describe("Live District News Scanner & Clinical Relevance Filters", () => {
   it("exports fetchLiveDistrictHealthNews function", () => {
     expect(typeof fetchLiveDistrictHealthNews).toBe("function");
   });
 
-  it("handles offline environments gracefully by returning empty array", async () => {
-    const articles = await fetchLiveDistrictHealthNews("Indore");
-    expect(Array.isArray(articles)).toBe(true);
+  it("filters out civic scandals, animal sightings, and hospital administration rows", () => {
+    const mockRssXml = `
+      <rss version="2.0">
+        <channel>
+          <item>
+            <title>Snake spotted near OPD window at Indore Govt Hospital, video goes viral - Medical Dialogues</title>
+            <link>https://news.google.com/articles/snake1</link>
+            <pubDate>Wed, 30 Sep 2026 12:00:00 GMT</pubDate>
+            <source>Medical Dialogues</source>
+          </item>
+          <item>
+            <title>H1N1-Linked Death In Madhya Pradesh Sparks Probe At Indore Hospital - NDTV</title>
+            <link>https://news.google.com/articles/h1n1-indore</link>
+            <pubDate>Fri, 21 Aug 2026 10:00:00 GMT</pubDate>
+            <source>NDTV</source>
+          </item>
+          <item>
+            <title>Snake enters MY Hospital's new OPD in Indore: Spotted near window - Bhaskar English</title>
+            <link>https://news.google.com/articles/snake2</link>
+            <pubDate>Tue, 29 Sep 2026 08:00:00 GMT</pubDate>
+            <source>Bhaskar English</source>
+          </item>
+          <item>
+            <title>'Not a single brick laid': MP's 100-bed hospital fully functional on 'paper' for 6 years - The Times of India</title>
+            <link>https://news.google.com/articles/brick-scandal</link>
+            <pubDate>Sat, 04 Jul 2026 09:00:00 GMT</pubDate>
+            <source>The Times of India</source>
+          </item>
+          <item>
+            <title>Indore Police launch probe after video sparks bandage row - The Times of India</title>
+            <link>https://news.google.com/articles/police-bandage</link>
+            <pubDate>Mon, 27 Jul 2026 14:00:00 GMT</pubDate>
+            <source>The Times of India</source>
+          </item>
+          <item>
+            <title>Dengue cases surge in Pune as Oct heat boost mosquito breeding - The Times of India</title>
+            <link>https://news.google.com/articles/dengue-pune</link>
+            <pubDate>Sat, 10 Oct 2026 09:00:00 GMT</pubDate>
+            <source>The Times of India</source>
+          </item>
+        </channel>
+      </rss>
+    `;
+
+    const articles = parseGoogleNewsRss(mockRssXml, "Indore");
+
+    // Out of 6 items, only H1N1 and Dengue should pass; 4 irrelevant civic/animal items must be blocked!
+    expect(articles.length).toBe(2);
+
+    const titles = articles.map((a) => a.title);
+    expect(titles.some((t) => t.includes("H1N1"))).toBe(true);
+    expect(titles.some((t) => t.includes("Dengue"))).toBe(true);
+
+    // Verify all 4 non-disease civic items were rejected
+    expect(titles.some((t) => t.includes("Snake"))).toBe(false);
+    expect(titles.some((t) => t.includes("brick"))).toBe(false);
+    expect(titles.some((t) => t.includes("bandage row"))).toBe(false);
   });
 });
