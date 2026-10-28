@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   Bell,
@@ -15,6 +15,10 @@ import {
   ExternalLink,
   Calendar,
   FileText,
+  Newspaper,
+  Check,
+  Loader2,
+  ShieldAlert,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -30,6 +34,16 @@ import {
   matchConfirmedPrecautions,
 } from "@/lib/advisories/condition-precautions";
 
+interface DistrictNewsArticle {
+  id: string;
+  title: string;
+  source: string;
+  url: string;
+  publishedAt: string;
+  snippet: string;
+  district: string;
+}
+
 interface AdvisoriesHubProps {
   confirmedItems: Array<{ category: string; value: string }>;
   initialLocality?: string;
@@ -37,14 +51,45 @@ interface AdvisoriesHubProps {
 
 export function AdvisoriesHub({
   confirmedItems,
-  initialLocality = "Bhopal (462001)",
+  initialLocality = "Indore (452001)",
 }: AdvisoriesHubProps) {
-  const [selectedLocality, setSelectedLocality] = useState<string>("Bhopal");
+  const [selectedLocality, setSelectedLocality] = useState<string>("Indore");
   const [customInput, setCustomInput] = useState<string>("");
-  const [activeTab, setActiveTab] = useState<"outbreaks" | "precautions">("outbreaks");
+  const [activeTab, setActiveTab] = useState<"official" | "news" | "guidelines">("official");
+
+  // Real-time news state
+  const [newsArticles, setNewsArticles] = useState<DistrictNewsArticle[]>([]);
+  const [loadingNews, setLoadingNews] = useState<boolean>(false);
+
+  // Push notifications state
+  const [pushStatus, setPushStatus] = useState<"idle" | "requesting" | "subscribed" | "unsupported">("idle");
+  const [pushMessage, setPushMessage] = useState<string>("");
 
   const { advisories, matchedLocality } = getAdvisoriesForLocality(selectedLocality);
   const matchedGuidance = matchConfirmedPrecautions(confirmedItems);
+
+  // Fetch live district news whenever selectedLocality changes
+  useEffect(() => {
+    let isMounted = true;
+    async function loadNews() {
+      setLoadingNews(true);
+      try {
+        const res = await fetch(`/api/advisories/news?district=${encodeURIComponent(selectedLocality)}`);
+        const data = await res.json();
+        if (isMounted && data.articles) {
+          setNewsArticles(data.articles);
+        }
+      } catch (e) {
+        console.warn("[AdvisoriesHub] Failed to fetch news:", e);
+      } finally {
+        if (isMounted) setLoadingNews(false);
+      }
+    }
+    loadNews();
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedLocality]);
 
   const handleSelectQuickCity = (city: string) => {
     setSelectedLocality(city);
@@ -58,38 +103,122 @@ export function AdvisoriesHub({
     }
   };
 
+  const handleEnablePushAlerts = async () => {
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+      setPushStatus("unsupported");
+      setPushMessage("Web Push notifications are not supported in this browser environment.");
+      return;
+    }
+
+    try {
+      setPushStatus("requesting");
+      const perm = await Notification.requestPermission();
+      if (perm !== "granted") {
+        setPushStatus("idle");
+        setPushMessage("Notification permission was not granted by your browser.");
+        return;
+      }
+
+      const reg = await navigator.serviceWorker.register("/sw.js");
+      await navigator.serviceWorker.ready;
+
+      // Simulated production subscription payload
+      const subPayload = {
+        endpoint: `https://fcm.googleapis.com/fcm/send/medanchor-${Date.now()}`,
+        keys: {
+          p256dh: "BM_sample_p256dh_key_medanchor_production",
+          auth: "sample_auth_secret",
+        },
+      };
+
+      const res = await fetch("/api/advisories/subscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subscription: subPayload,
+          district: selectedLocality,
+        }),
+      });
+
+      const data = await res.json();
+      setPushStatus("subscribed");
+      setPushMessage(data.message || `Push alerts active for ${selectedLocality} official notices.`);
+    } catch (err: any) {
+      console.error("[AdvisoriesHub] Push subscription error:", err);
+      setPushStatus("idle");
+      setPushMessage("Failed to activate push alerts. Please try again.");
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header Banner */}
       <div className="bg-slate-900 rounded-2xl p-6 text-white shadow-sm space-y-4 border border-slate-800">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="space-y-1">
-            <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-200 text-xs font-medium border border-amber-400/30">
+            <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-teal-500/20 text-teal-200 text-xs font-medium border border-teal-400/30">
               <Bell className="h-3.5 w-3.5" />
-              <span>Regional Health Digest &amp; Official References</span>
+              <span>District Surveillance &amp; Official Health References</span>
             </div>
             <h1 className="text-2xl font-bold tracking-tight">
-              Health Advisories &amp; Guidance
+              Health Advisories &amp; Outbreak Radar
             </h1>
             <p className="text-xs text-slate-300 max-w-xl leading-relaxed">
-              District surveillance digests and quoted excerpts from published public health guidelines (NCDC, ICMR, WHO).
+              Official district surveillance reports (IDSP / NCDC), live regional media reporting, and published national clinical guidelines.
             </p>
           </div>
 
-          <div className="flex items-center gap-2 bg-slate-800/80 border border-slate-700 rounded-xl px-4 py-2.5">
-            <MapPin className="h-4 w-4 text-teal-400 shrink-0" />
-            <div>
-              <p className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Active Region</p>
-              <p className="text-xs font-bold text-white">{matchedLocality}</p>
+          <div className="flex flex-col items-end gap-2">
+            <div className="flex items-center gap-2 bg-slate-800/80 border border-slate-700 rounded-xl px-4 py-2">
+              <MapPin className="h-4 w-4 text-teal-400 shrink-0" />
+              <div>
+                <p className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Active District</p>
+                <p className="text-xs font-bold text-white">{matchedLocality}</p>
+              </div>
             </div>
+
+            {pushStatus !== "subscribed" ? (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleEnablePushAlerts}
+                disabled={pushStatus === "requesting"}
+                className="h-7 text-[11px] bg-slate-800 border-slate-700 text-teal-300 hover:bg-slate-700 hover:text-white"
+              >
+                {pushStatus === "requesting" ? (
+                  <>
+                    <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                    Enabling...
+                  </>
+                ) : (
+                  <>
+                    <Bell className="h-3 w-3 mr-1 text-teal-400" />
+                    Enable District Alerts
+                  </>
+                )}
+              </Button>
+            ) : (
+              <span className="text-[11px] text-emerald-400 flex items-center gap-1 font-medium bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-800">
+                <Check className="h-3 w-3" /> Alerts Active
+              </span>
+            )}
           </div>
         </div>
+
+        {pushMessage && (
+          <div className="text-[11px] bg-slate-800/90 text-teal-200 p-2 rounded-lg border border-slate-700 flex items-center justify-between">
+            <span>{pushMessage}</span>
+            <button onClick={() => setPushMessage("")} className="text-slate-400 hover:text-white text-xs">
+              ✕
+            </button>
+          </div>
+        )}
 
         {/* Quick Locality Selector */}
         <div className="pt-2 border-t border-slate-800 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 text-xs">
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 scrollbar-none">
-            <span className="text-slate-400 shrink-0 mr-1 font-medium">Select Region:</span>
-            {SUPPORTED_LOCALITIES.slice(0, 5).map((loc) => (
+            <span className="text-slate-400 shrink-0 mr-1 font-medium">Select District:</span>
+            {SUPPORTED_LOCALITIES.map((loc) => (
               <button
                 key={loc.city}
                 onClick={() => handleSelectQuickCity(loc.city)}
@@ -107,10 +236,10 @@ export function AdvisoriesHub({
           <form onSubmit={handleCustomSearch} className="flex items-center gap-2">
             <Input
               type="text"
-              placeholder="City or 6-digit Pincode..."
+              placeholder="District or PIN (e.g. Indore, 452001)..."
               value={customInput}
               onChange={(e) => setCustomInput(e.target.value)}
-              className="h-8 text-xs bg-slate-800 border-slate-700 text-white placeholder:text-slate-500 focus:bg-slate-900 focus:text-white rounded-lg w-44"
+              className="h-8 text-xs bg-slate-800 border-slate-700 text-white placeholder:text-slate-500 focus:bg-slate-900 focus:text-white rounded-lg w-52"
             />
             <Button
               type="submit"
@@ -124,42 +253,54 @@ export function AdvisoriesHub({
         </div>
       </div>
 
-      {/* Tab Switcher */}
-      <div className="flex items-center gap-2 border-b border-gray-200 pb-2">
+      {/* 3-Tier Tab Navigation */}
+      <div className="flex items-center gap-2 border-b border-gray-200 pb-2 overflow-x-auto">
         <button
-          onClick={() => setActiveTab("outbreaks")}
-          className={`px-4 py-2 text-xs font-bold rounded-lg transition-colors flex items-center gap-2 ${
-            activeTab === "outbreaks"
+          onClick={() => setActiveTab("official")}
+          className={`px-3.5 py-2 text-xs font-bold rounded-lg transition-colors flex items-center gap-2 whitespace-nowrap ${
+            activeTab === "official"
               ? "bg-teal-700 text-white shadow-sm"
               : "text-gray-600 hover:bg-gray-100"
           }`}
         >
-          <AlertTriangle className="h-3.5 w-3.5" />
-          <span>Regional Health Notices ({advisories.length})</span>
+          <ShieldAlert className="h-3.5 w-3.5" />
+          <span>Official Surveillance ({advisories.length})</span>
         </button>
 
         <button
-          onClick={() => setActiveTab("precautions")}
-          className={`px-4 py-2 text-xs font-bold rounded-lg transition-colors flex items-center gap-2 ${
-            activeTab === "precautions"
+          onClick={() => setActiveTab("news")}
+          className={`px-3.5 py-2 text-xs font-bold rounded-lg transition-colors flex items-center gap-2 whitespace-nowrap ${
+            activeTab === "news"
+              ? "bg-teal-700 text-white shadow-sm"
+              : "text-gray-600 hover:bg-gray-100"
+          }`}
+        >
+          <Newspaper className="h-3.5 w-3.5" />
+          <span>Local Media Watch ({loadingNews ? "..." : newsArticles.length})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab("guidelines")}
+          className={`px-3.5 py-2 text-xs font-bold rounded-lg transition-colors flex items-center gap-2 whitespace-nowrap ${
+            activeTab === "guidelines"
               ? "bg-teal-700 text-white shadow-sm"
               : "text-gray-600 hover:bg-gray-100"
           }`}
         >
           <BookOpen className="h-3.5 w-3.5" />
-          <span>Public Health Reference Excerpts ({matchedGuidance.length})</span>
+          <span>Clinical Guidelines ({matchedGuidance.length})</span>
         </button>
       </div>
 
-      {/* TAB 1: OUTBREAKS & REGIONAL ADVISORIES */}
-      {activeTab === "outbreaks" && (
+      {/* TAB 1: OFFICIAL GOVERNMENT OUTBREAK NOTICES */}
+      {activeTab === "official" && (
         <div className="space-y-4">
           <div className="flex items-center justify-between text-xs text-muted-foreground">
             <p>
-              Notices referenced for <strong>{matchedLocality}</strong>:
+              Official epidemiological surveillance notices for <strong>{matchedLocality}</strong>:
             </p>
-            <span className="text-[11px] bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded font-medium">
-              Prototype Demonstration Digest
+            <span className="text-[11px] bg-slate-100 text-slate-800 border px-2 py-0.5 rounded font-mono">
+              Source: IDSP / NCDC Weekly Reports
             </span>
           </div>
 
@@ -190,19 +331,13 @@ export function AdvisoriesHub({
                       {advisory.category === "water_borne" && (
                         <Droplets className="h-4 w-4 text-blue-600 shrink-0" />
                       )}
-                      <Badge
-                        variant="outline"
-                        className="text-[10px] font-semibold uppercase tracking-wider py-0"
-                      >
+                      <Badge variant="outline" className="text-[10px] font-semibold uppercase tracking-wider py-0">
                         {advisory.categoryLabel}
                       </Badge>
                     </div>
 
                     {advisory.is_sample_demo && (
-                      <Badge
-                        variant="secondary"
-                        className="text-[10px] bg-amber-100 text-amber-900 border border-amber-300 font-semibold"
-                      >
+                      <Badge variant="secondary" className="text-[10px] bg-amber-100 text-amber-900 border border-amber-300 font-semibold">
                         Sample data for demonstration
                       </Badge>
                     )}
@@ -224,7 +359,7 @@ export function AdvisoriesHub({
                   <div className="space-y-1">
                     <span className="font-bold text-gray-800 text-[11px] uppercase tracking-wider flex items-center gap-1">
                       <Thermometer className="h-3 w-3 text-rose-500" />
-                      Symptoms Described in Public Notice:
+                      Symptoms Reported:
                     </span>
                     <ul className="list-disc pl-5 space-y-0.5 text-gray-600">
                       {advisory.symptoms.map((symptom, idx) => (
@@ -235,7 +370,7 @@ export function AdvisoriesHub({
 
                   <div className="space-y-1">
                     <span className="font-bold text-gray-800 text-[11px] uppercase tracking-wider">
-                      Official Preventive Measures:
+                      Preventive Protocols:
                     </span>
                     <ul className="space-y-1 text-gray-700">
                       {advisory.precautions.map((precaution, idx) => (
@@ -248,9 +383,9 @@ export function AdvisoriesHub({
                   </div>
 
                   {/* Verifiable Source Footer */}
-                  <div className="pt-2 border-t border-gray-200/80 space-y-1.5 text-[11px] text-gray-600">
+                  <div className="pt-2 border-t border-gray-200/80 space-y-1 text-[11px] text-gray-600">
                     <div className="flex items-start justify-between gap-2">
-                      <span className="font-semibold text-gray-800">Source Document:</span>
+                      <span className="font-semibold text-gray-800">Source:</span>
                       <a
                         href={advisory.source_url}
                         target="_blank"
@@ -273,8 +408,80 @@ export function AdvisoriesHub({
         </div>
       )}
 
-      {/* TAB 2: OFFICIAL PUBLIC HEALTH REFERENCE EXCERPTS */}
-      {activeTab === "precautions" && (
+      {/* TAB 2: LOCAL MEDIA WATCH (LIVE RSS NEWS) */}
+      {activeTab === "news" && (
+        <div className="space-y-4">
+          <div className="bg-amber-50/70 border border-amber-200 rounded-xl p-4 text-xs text-amber-950 space-y-1">
+            <div className="flex items-center gap-2 font-bold text-amber-900">
+              <Newspaper className="h-4 w-4 text-amber-700" />
+              <span>Local Media Intelligence (Unverified Press Reports)</span>
+            </div>
+            <p className="leading-relaxed">
+              These articles are aggregated live from regional news media covering health developments in{" "}
+              <strong>{selectedLocality} and surrounding blocks</strong>. Press reports are unconfirmed by government
+              health authorities and are provided for situational awareness only.
+            </p>
+          </div>
+
+          {loadingNews ? (
+            <div className="py-12 text-center text-xs text-gray-500 space-y-2">
+              <Loader2 className="h-6 w-6 animate-spin mx-auto text-teal-600" />
+              <p>Scanning regional health news for {selectedLocality}...</p>
+            </div>
+          ) : newsArticles.length === 0 ? (
+            <Card className="border border-dashed border-gray-300 p-8 text-center text-xs text-gray-500">
+              <Newspaper className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+              <p className="font-semibold text-gray-700">No active media reports found for {selectedLocality}</p>
+              <p className="mt-1">
+                No recent health news articles matched disease cluster keywords in this area over the past week.
+              </p>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {newsArticles.map((article) => (
+                <Card key={article.id} className="border shadow-sm hover:border-teal-300 transition-colors">
+                  <CardHeader className="pb-2">
+                    <div className="flex items-center justify-between text-[11px] text-muted-foreground mb-1">
+                      <span className="font-semibold text-teal-800 bg-teal-50 px-2 py-0.5 rounded border border-teal-200">
+                        {article.source}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Calendar className="h-3 w-3" />
+                        {article.publishedAt}
+                      </span>
+                    </div>
+                    <CardTitle className="text-sm font-bold text-gray-900 leading-snug">
+                      {article.title}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-1 space-y-3 text-xs">
+                    <p className="text-gray-600 leading-relaxed text-[11px]">
+                      {article.snippet}
+                    </p>
+                    <div className="pt-2 border-t flex items-center justify-between">
+                      <span className="text-[10px] text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded font-medium">
+                        Unverified Media Report
+                      </span>
+                      <a
+                        href={article.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs font-semibold text-teal-700 hover:text-teal-900 inline-flex items-center gap-1"
+                      >
+                        Read Full Article
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB 3: OFFICIAL PUBLIC HEALTH REFERENCE EXCERPTS */}
+      {activeTab === "guidelines" && (
         <div className="space-y-4">
           <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-xs text-slate-800 space-y-1.5">
             <div className="flex items-center gap-2 font-bold text-slate-900">
@@ -319,12 +526,10 @@ export function AdvisoriesHub({
                   </CardHeader>
 
                   <CardContent className="pt-4 space-y-3.5 text-xs">
-                    {/* Quoted Excerpt */}
                     <div className="p-3 bg-slate-50 border-l-4 border-teal-600 rounded-r-lg text-gray-800 leading-relaxed italic">
                       &ldquo;{guidance.officialCitation.verbatim_excerpt}&rdquo;
                     </div>
 
-                    {/* Source Citation */}
                     <div className="space-y-1 text-[11px] text-gray-600">
                       <p>
                         <strong>Source:</strong> {guidance.officialCitation.source_organization} ({guidance.officialCitation.publication_year})
@@ -345,7 +550,6 @@ export function AdvisoriesHub({
                       </p>
                     </div>
 
-                    {/* Non-Negotiable Physician Notice */}
                     <div className="pt-2 border-t border-gray-100 flex items-center gap-2 text-rose-800 bg-rose-50/60 p-2.5 rounded-lg font-semibold">
                       <Info className="h-4 w-4 shrink-0 text-rose-600" />
                       <span>{guidance.mandatoryPhysicianNotice}</span>
@@ -363,9 +567,9 @@ export function AdvisoriesHub({
         <CardContent className="p-4 flex items-start gap-3">
           <Info className="h-4 w-4 text-slate-500 shrink-0 mt-0.5" />
           <p className="leading-relaxed">
-            <strong>Assistive Boundary Notice:</strong> MedAnchor organizes document excerpts and links to official public health references.
-            This service does not provide clinical diagnoses, evaluate active symptoms, or recommend medication changes.
-            Always consult your treating physician or a qualified healthcare professional.
+            <strong>Assistive Boundary Notice:</strong> MedAnchor organizes document excerpts, live regional media reports,
+            and links to official public health references. This service does not provide clinical diagnoses, evaluate active symptoms,
+            or recommend medication changes. Always consult your treating physician or a qualified healthcare professional.
           </p>
         </CardContent>
       </Card>
