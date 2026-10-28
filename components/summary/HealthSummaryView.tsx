@@ -627,7 +627,7 @@ export function HealthSummaryView() {
                                       <span>Second Reader Flag: {item.review_reason}</span>
                                     </div>
                                     <p className="text-[11px] text-rose-700 leading-normal">
-                                      Tesseract OCR and Gemini found conflicting text on this page. Carefully inspect your document scan before confirming.
+                                      Independent second reading found conflicting text on this page. Carefully inspect your document scan before confirming.
                                     </p>
                                   </div>
                                 )}

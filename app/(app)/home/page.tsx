@@ -218,7 +218,7 @@ export default async function HomePage() {
               Scan Document
             </span>
             <span className="text-[11px] text-slate-500 font-medium mt-0.5 block">
-              Gemini + Tesseract OCR
+              Upload Prescriptions &amp; Reports
             </span>
           </div>
         </Link>
@@ -338,7 +338,7 @@ export default async function HomePage() {
                       <span>•</span>
                       <span className="text-emerald-700 font-semibold flex items-center gap-1">
                         <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                        2nd Reader OCR Verified
+                        Dual-Reader Verified
                       </span>
                     </div>
                   </div>
@@ -346,7 +346,7 @@ export default async function HomePage() {
 
                 <div className="flex items-center gap-2">
                   <span className="hidden sm:inline-block text-[11px] text-slate-400 font-medium group-hover:text-teal-600 transition-colors">
-                    Inspect Provenance
+                    Review Record
                   </span>
                   <ChevronRight className="h-4 w-4 text-slate-300 group-hover:text-teal-600 group-hover:translate-x-0.5 transition-all" />
                 </div>

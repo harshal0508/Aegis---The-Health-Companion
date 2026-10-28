@@ -535,7 +535,7 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
                     Ready for Clinical Extraction
                   </p>
                   <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                    Extract verified medications, allergies, conditions, and procedures from this document using Gemini Vision with strict quote verification.
+                    Extract verified medications, allergies, conditions, and procedures from this document with strict verbatim quote verification.
                   </p>
                 </div>
 
@@ -547,12 +547,12 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
                   {extracting ? (
                     <>
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Extracting records with Gemini...
+                      Extracting clinical records...
                     </>
                   ) : (
                     <>
                       <Sparkles className="h-4 w-4 mr-2" />
-                      Extract Records with Gemini
+                      Extract Records from Document
                     </>
                   )}
                 </Button>
