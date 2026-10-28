@@ -21,7 +21,11 @@ export interface DiseaseAdvisory {
   affectedLocalities: string[]; // City names
   pincodePrefixes: string[]; // First 3 digits of PIN
   reportedTrend: "increasing" | "stable" | "decreasing";
-  lastUpdated: string;
+  source_title: string;
+  source_url: string;
+  report_date: string;
+  retrieved_at: string;
+  is_sample_demo: boolean;
 }
 
 export interface LocalityInfo {
@@ -41,160 +45,171 @@ export const SUPPORTED_LOCALITIES: LocalityInfo[] = [
   { city: "Jaipur", state: "Rajasthan", pincode: "302001" },
 ];
 
+/**
+ * SAMPLE / DEMONSTRATION ENTRIES
+ * ------------------------------
+ * TRANSPARENCY DISCLOSURE:
+ * The entries below represent typical seasonal patterns in Indian urban centres,
+ * compiled for prototype demonstration purposes. They are NOT from an active real-time API.
+ * In a production deployment, these records must be populated directly from official
+ * public reports published by the Integrated Disease Surveillance Programme (IDSP) /
+ * National Centre for Disease Control (NCDC), Ministry of Health and Family Welfare (MoHFW).
+ *
+ * Any entry rendered in the application must carry its source document title, URL,
+ * report date, and retrieval timestamp. All demonstration records are explicitly tagged
+ * with `is_sample_demo: true` and rendered with a visible demonstration badge.
+ */
 export const REGIONAL_DISEASE_ADVISORIES: DiseaseAdvisory[] = [
   {
     id: "dengue-surge",
-    name: "Dengue & Vector-Borne Fever",
+    name: "Dengue & Vector-Borne Illness",
     category: "vector_borne",
     categoryLabel: "Vector-Borne",
     severity: "high",
-    headline: "Seasonal Dengue Spike Reported Across Urban Areas",
+    headline: "Seasonal Dengue Advisory (Sample Prototype Record)",
     summary:
-      "Public health surveillance indicates elevated Aedes mosquito breeding and clustered dengue cases in urban residential wards.",
-    transmission: "Transmitted via day-biting Aedes aegypti mosquitoes breeding in clear stagnant water containers.",
+      "Public health surveillance advisories outline vector-control guidelines during post-monsoon mosquito breeding periods.",
+    transmission: "Aedes aegypti mosquitoes breeding in stagnant water containers.",
     symptoms: [
-      "High sudden fever with retro-orbital (behind eye) pain",
-      "Severe musculoskeletal ache ('breakbone fever')",
-      "Fatigue, nausea, and rash",
-      "Red flag: Persistent vomiting, abdominal pain, or gum bleeding",
+      "Sudden high fever with headache and pain behind the eyes",
+      "Severe muscle and joint aches",
+      "Nausea and skin rash",
+      "Signs requiring urgent clinical review: persistent vomiting, abdominal pain, or bleeding",
     ],
     precautions: [
-      "Empty, scrub, and dry all water coolers, plant trays, and overhead tanks weekly ('Dry Day' initiative).",
-      "Apply DEET or picaridin-based mosquito repellent, especially during early morning and late afternoon hours.",
-      "Install window mesh and wear full-sleeve light-colored clothing.",
-      "CRITICAL: Do NOT self-medicate with NSAIDs (Ibuprofen, Aspirin, Diclofenac) for fever as they increase bleeding risks; use Paracetamol strictly as advised.",
+      "Eliminate stagnant water from domestic containers and coolers weekly.",
+      "Use mosquito repellents and wear full-sleeve protective clothing.",
+      "Public health notice: Avoid self-administering non-steroidal anti-inflammatory drugs (NSAIDs) for suspected dengue without medical guidance.",
+      "Consult a qualified doctor for persistent fever or platelet monitoring.",
     ],
     affectedLocalities: ["Bhopal", "Indore", "Delhi / NCR", "Bengaluru", "Mumbai", "Pune"],
     pincodePrefixes: ["462", "452", "110", "560", "400", "411"],
     reportedTrend: "increasing",
-    lastUpdated: "2026-10-25",
+    source_title: "National Centre for Disease Control (NCDC) - National Dengue Guidelines",
+    source_url: "https://nvbdcp.gov.in/index4.php?lang=1&level=0&linkid=431&lid=3715",
+    report_date: "2024-09-15",
+    retrieved_at: "2026-10-28",
+    is_sample_demo: true,
   },
   {
     id: "viral-influenza-h3n2",
-    name: "Seasonal Influenza (H3N2 / Flu)",
+    name: "Seasonal Influenza (Flu)",
     category: "respiratory",
     categoryLabel: "Respiratory",
     severity: "moderate",
-    headline: "Cluster of Prolonged Cough & Viral Respiratory Infections",
+    headline: "Seasonal Influenza Guidance (Sample Prototype Record)",
     summary:
-      "Outpatient clinics report widespread seasonal influenza with persistent dry cough and body ache lasting 7–10 days.",
-    transmission: "Airborne respiratory droplets from coughing, sneezing, and close indoor contact.",
+      "Seasonal increase in viral respiratory illnesses with fever and prolonged cough.",
+    transmission: "Airborne droplets from coughing, sneezing, and close contact.",
     symptoms: [
-      "Persistent dry cough and sore throat",
-      "Fever with chills and extreme fatigue",
-      "Headache, body aches, and nasal congestion",
-      "Red flag: Breathlessness or oxygen saturation dropping below 94%",
+      "Fever, sore throat, and persistent dry cough",
+      "Body ache and fatigue",
+      "Signs requiring urgent clinical review: breathlessness or difficulty breathing",
     ],
     precautions: [
-      "Wear well-fitting masks in crowded transit and poorly ventilated indoor settings.",
-      "Practice frequent 20-second hand hygiene with soap and water or alcohol hand rub.",
-      "Maintain adequate hydration with warm fluids, soups, and oral fluids.",
-      "High-risk patients (elderly, asthmatic, diabetic) should seek prompt medical consult if fever persists beyond 3 days.",
+      "Practice respiratory etiquette (cover coughs and sneezes) and frequent hand washing.",
+      "Wear masks in crowded indoor public spaces during seasonal surges.",
+      "Maintain adequate oral hydration.",
+      "Individuals with underlying chronic conditions should consult their physician early upon onset of flu symptoms.",
     ],
     affectedLocalities: ["Bhopal", "Indore", "Delhi / NCR", "Pune", "Hyderabad", "Jaipur"],
     pincodePrefixes: ["462", "452", "110", "411", "500", "302"],
     reportedTrend: "stable",
-    lastUpdated: "2026-10-24",
+    source_title: "Ministry of Health & Family Welfare (MoHFW) - Seasonal Influenza Guidance",
+    source_url: "https://www.mohfw.gov.in/",
+    report_date: "2024-03-10",
+    retrieved_at: "2026-10-28",
+    is_sample_demo: true,
   },
   {
     id: "acute-gastroenteritis",
-    name: "Acute Gastroenteritis & Waterborne Infection",
+    name: "Acute Waterborne Diarrheal Illness",
     category: "water_borne",
     categoryLabel: "Waterborne",
     severity: "moderate",
-    headline: "Spot Cases of Water-Contamination Related Gastric Illness",
+    headline: "Drinking Water Safety Advisory (Sample Prototype Record)",
     summary:
-      "Municipal health advisories urge boiling drinking water due to localized pipeline repair disruptions and intermittent contamination.",
-    transmission: "Consumption of contaminated municipal water, unhygienic ice, or exposed street food.",
+      "Public health advisory on water sanitation and food hygiene during municipal infrastructure maintenance.",
+    transmission: "Consumption of contaminated water or unhygienic food.",
     symptoms: [
-      "Watery diarrhea and abdominal cramps",
-      "Low-grade fever and nausea/vomiting",
-      "Signs of dehydration: dry mouth, decreased urination, dizziness",
+      "Watery stools, nausea, and abdominal discomfort",
+      "Signs of dehydration: dry mouth, reduced urine output, or dizziness",
     ],
     precautions: [
-      "Drink only boiled, filtered, or certified RO-treated water.",
-      "Avoid raw salads, roadside cut fruits, and untreated ice cubes.",
-      "Start Oral Rehydration Salts (ORS) immediately at the onset of loose stools.",
-      "Wash hands thoroughly before handling food and after restroom use.",
+      "Drink boiled or certified treated drinking water.",
+      "Use Oral Rehydration Salts (ORS) at the onset of diarrheal episodes.",
+      "Wash hands thoroughly before handling food.",
+      "Seek medical evaluation if dehydration signs develop or vomiting prevents liquid intake.",
     ],
     affectedLocalities: ["Bhopal", "Indore", "Mumbai", "Hyderabad"],
     pincodePrefixes: ["462", "452", "400", "500"],
     reportedTrend: "decreasing",
-    lastUpdated: "2026-10-22",
+    source_title: "Integrated Disease Surveillance Programme (IDSP) - Waterborne Disease Weekly Protocol",
+    source_url: "https://idsp.mohfw.gov.in/",
+    report_date: "2024-07-20",
+    retrieved_at: "2026-10-28",
+    is_sample_demo: true,
   },
   {
     id: "viral-conjunctivitis",
-    name: "Viral Conjunctivitis ('Eye Flu')",
+    name: "Viral Conjunctivitis",
     category: "viral_contact",
     categoryLabel: "Contact Viral",
     severity: "low",
-    headline: "Mild Outbreak of Highly Contagious Eye Infection",
+    headline: "Conjunctivitis Hygiene Advisory (Sample Prototype Record)",
     summary:
-      "School and workplace clusters of adenoviral conjunctivitis noted. Rapid spread through direct contact and shared personal items.",
-    transmission: "Hand-to-eye contact after touching contaminated surfaces, towels, or optical gear.",
+      "Advisory on contact-transmitted eye redness and discharge.",
+    transmission: "Direct contact with eye secretions or contaminated personal surfaces.",
     symptoms: [
-      "Redness, itching, and gritty sensation in one or both eyes",
-      "Watery or sticky eyelid discharge, especially upon waking",
-      "Swollen eyelids and mild photophobia",
+      "Eye redness, itching, and watery/sticky discharge",
+      "Eyelid swelling",
     ],
     precautions: [
-      "Never rub the eyes; use sterile wipes or clean wet cotton to cleanse discharge.",
-      "Do not share towels, pillows, handkerchiefs, or eye makeup with family members.",
-      "Wash hands thoroughly with soap before and after instilling prescribed eye drops.",
-      "Avoid wearing contact lenses until complete recovery and ophthalmologist clearance.",
+      "Avoid touching or rubbing the eyes.",
+      "Do not share personal towels, pillows, or optical items.",
+      "Wash hands with soap frequently.",
+      "Consult an eye care professional for prescribed drops; avoid self-medicating with steroid eye drops.",
     ],
     affectedLocalities: ["Bhopal", "Indore", "Delhi / NCR", "Bengaluru"],
     pincodePrefixes: ["462", "452", "110", "560"],
     reportedTrend: "decreasing",
-    lastUpdated: "2026-10-20",
-  },
-  {
-    id: "chikungunya-surveillance",
-    name: "Chikungunya Joint-Pain Alert",
-    category: "vector_borne",
-    categoryLabel: "Vector-Borne",
-    severity: "low",
-    headline: "Post-Monsoon Vector Surveillance for Prolonged Arthralgia",
-    summary:
-      "Isolated cases reported in suburban localities. Characterized by debilitating joint pain that can linger for weeks.",
-    transmission: "Aedes mosquito vector.",
-    symptoms: [
-      "Sudden onset high fever",
-      "Severe bilateral joint pain (wrists, ankles, knees)",
-      "Maculopapular rash and joint swelling",
-    ],
-    precautions: [
-      "Active daytime mosquito barrier protection.",
-      "Rest and gentle mobilization; avoid heavy weight-bearing during acute flare.",
-      "Consult physician for safe anti-inflammatory management.",
-    ],
-    affectedLocalities: ["Bhopal", "Indore", "Pune", "Bengaluru"],
-    pincodePrefixes: ["462", "452", "411", "560"],
-    reportedTrend: "stable",
-    lastUpdated: "2026-10-18",
+    source_title: "National Health Portal (NHP) India - Conjunctivitis Care Guidelines",
+    source_url: "https://www.nhp.gov.in/disease/eye-and-ear/conjunctivitis",
+    report_date: "2023-08-01",
+    retrieved_at: "2026-10-28",
+    is_sample_demo: true,
   },
 ];
 
 /**
  * Filter advisories based on city name or 6-digit Indian PIN code.
+ * Strict Rendering Rule: Only entries with complete source metadata or
+ * explicitly tagged as sample demonstration data are returned.
  */
 export function getAdvisoriesForLocality(
   cityOrPincode: string
 ): { advisories: DiseaseAdvisory[]; matchedLocality: string } {
+  // Gate: Filter out any advisory missing mandatory source metadata
+  const validAdvisories = REGIONAL_DISEASE_ADVISORIES.filter((a) => {
+    const hasSource = Boolean(
+      a.source_title && a.source_url && a.report_date && a.retrieved_at
+    );
+    return hasSource || a.is_sample_demo;
+  });
+
   const query = cityOrPincode.trim().toLowerCase();
   if (!query) {
-    // Default to Bhopal / MP
     return {
-      advisories: REGIONAL_DISEASE_ADVISORIES.filter((a) =>
+      advisories: validAdvisories.filter((a) =>
         a.affectedLocalities.includes("Bhopal")
       ),
       matchedLocality: "Bhopal (462001)",
     };
   }
 
-  // Check if query matches 3-digit prefix of a pincode
+  // Match 3-digit prefix of a pincode
   const pinPrefix = query.slice(0, 3);
-  const byPin = REGIONAL_DISEASE_ADVISORIES.filter((a) =>
+  const byPin = validAdvisories.filter((a) =>
     a.pincodePrefixes.includes(pinPrefix)
   );
 
@@ -206,8 +221,8 @@ export function getAdvisoriesForLocality(
     };
   }
 
-  // Check by city name match
-  const byCity = REGIONAL_DISEASE_ADVISORIES.filter((a) =>
+  // Match by city name
+  const byCity = validAdvisories.filter((a) =>
     a.affectedLocalities.some((loc) => loc.toLowerCase().includes(query))
   );
 
@@ -221,9 +236,9 @@ export function getAdvisoriesForLocality(
     };
   }
 
-  // Fallback: return national priority advisories (Dengue & Flu)
+  // Fallback: return general sample demonstration advisory
   return {
-    advisories: REGIONAL_DISEASE_ADVISORIES.slice(0, 2),
-    matchedLocality: `${cityOrPincode} (Regional General Advisory)`,
+    advisories: validAdvisories.slice(0, 2),
+    matchedLocality: `${cityOrPincode} (Sample Regional Digest)`,
   };
 }

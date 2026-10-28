@@ -4,9 +4,9 @@ import { AdvisoriesHub } from "@/components/advisories/AdvisoriesHub";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Health Advisories & Precautions | MedAnchor",
+  title: "Health Advisories & References | MedAnchor",
   description:
-    "Real-time local disease surveillance and personalized medical precautions matched to your confirmed records.",
+    "Regional health advisory digest (demonstration) and official public health reference citations matching confirmed records.",
 };
 
 export default async function AdvisoriesPage() {

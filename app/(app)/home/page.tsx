@@ -95,7 +95,7 @@ export default async function HomePage() {
         </CardContent>
       </Card>
 
-      {/* Local Health Advisories & Outbreak Intelligence (Tier 04) */}
+      {/* Regional Health Digest (Demonstration) */}
       <Card className="border-amber-200 bg-amber-50/40 shadow-sm">
         <CardContent className="p-5 flex items-start sm:items-center justify-between gap-4 flex-col sm:flex-row">
           <div className="flex items-start gap-3.5">
@@ -103,27 +103,27 @@ export default async function HomePage() {
               <Bell className="h-5 w-5" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="text-base font-semibold text-gray-900">
-                  Local Health Advisories
+                  Regional Health Digest
                 </h2>
-                <Badge className="bg-rose-600 text-white text-[10px] uppercase font-bold py-0">
-                  Active Notice
+                <Badge className="bg-amber-100 text-amber-900 border border-amber-300 text-[10px] uppercase font-semibold py-0">
+                  Sample data for demonstration
                 </Badge>
               </div>
               <p className="text-xs text-gray-600 mt-1">
-                Seasonal Dengue spike &amp; viral respiratory notices active in your region (Bhopal / Central India).
+                Sample Dengue &amp; seasonal respiratory notice entries (prototype demonstration — not a live feed).
                 {confirmedConditions.length > 0 && (
                   <span className="text-teal-700 font-medium">
-                    {" "}Matched with precautions for your confirmed {confirmedConditions[0].value}.
+                    {" "}Official guideline excerpts available for your confirmed {confirmedConditions[0].value}.
                   </span>
                 )}
               </p>
             </div>
           </div>
           <Link href="/advisories">
-            <Button size="sm" className="bg-amber-600 hover:bg-amber-700 text-white text-xs whitespace-nowrap">
-              View Outbreaks &amp; Precautions
+            <Button size="sm" variant="outline" className="border-amber-300 bg-white text-amber-900 hover:bg-amber-100 text-xs whitespace-nowrap">
+              View Sample Digest &amp; Sources
             </Button>
           </Link>
         </CardContent>

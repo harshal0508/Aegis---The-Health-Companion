@@ -5,22 +5,16 @@ import Link from "next/link";
 import {
   Bell,
   AlertTriangle,
-  ShieldCheck,
   MapPin,
   Thermometer,
-  Activity,
-  HeartPulse,
+  BookOpen,
   Info,
-  CheckCircle2,
   Droplets,
   Wind,
   Eye,
-  Search,
   ExternalLink,
-  ChevronRight,
-  ShieldAlert,
   Calendar,
-  AlertCircle,
+  FileText,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -32,7 +26,7 @@ import {
   getAdvisoriesForLocality,
 } from "@/lib/advisories/disease-data";
 import {
-  ConditionPrecaution,
+  ConditionGuidance,
   matchConfirmedPrecautions,
 } from "@/lib/advisories/condition-precautions";
 
@@ -50,9 +44,7 @@ export function AdvisoriesHub({
   const [activeTab, setActiveTab] = useState<"outbreaks" | "precautions">("outbreaks");
 
   const { advisories, matchedLocality } = getAdvisoriesForLocality(selectedLocality);
-  const matchedPrecautions = matchConfirmedPrecautions(confirmedItems);
-
-  const highSeverityCount = advisories.filter((a) => a.severity === "high").length;
+  const matchedGuidance = matchConfirmedPrecautions(confirmedItems);
 
   const handleSelectQuickCity = (city: string) => {
     setSelectedLocality(city);
@@ -69,42 +61,42 @@ export function AdvisoriesHub({
   return (
     <div className="space-y-6">
       {/* Header Banner */}
-      <div className="bg-gradient-to-r from-teal-900 via-teal-800 to-slate-900 rounded-2xl p-6 text-white shadow-sm space-y-4">
+      <div className="bg-slate-900 rounded-2xl p-6 text-white shadow-sm space-y-4 border border-slate-800">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="space-y-1">
-            <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-teal-500/20 text-teal-200 text-xs font-medium border border-teal-400/30">
+            <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-200 text-xs font-medium border border-amber-400/30">
               <Bell className="h-3.5 w-3.5" />
-              <span>Public Health &amp; Outbreak Surveillance</span>
+              <span>Regional Health Digest &amp; Official References</span>
             </div>
-            <h1 className="text-2xl font-extrabold tracking-tight">
-              Local Health Advisories
+            <h1 className="text-2xl font-bold tracking-tight">
+              Health Advisories &amp; Guidance
             </h1>
-            <p className="text-xs text-teal-100/90 max-w-xl leading-relaxed">
-              Real-time regional disease surveillance and personalized medical precautions matched to your confirmed records.
+            <p className="text-xs text-slate-300 max-w-xl leading-relaxed">
+              District surveillance digests and quoted excerpts from published public health guidelines (NCDC, ICMR, WHO).
             </p>
           </div>
 
-          <div className="flex items-center gap-2 bg-black/20 backdrop-blur-sm border border-white/10 rounded-xl px-4 py-2.5">
-            <MapPin className="h-4 w-4 text-teal-300 shrink-0" />
+          <div className="flex items-center gap-2 bg-slate-800/80 border border-slate-700 rounded-xl px-4 py-2.5">
+            <MapPin className="h-4 w-4 text-teal-400 shrink-0" />
             <div>
-              <p className="text-[10px] text-teal-200 uppercase tracking-wider font-semibold">Active Region</p>
+              <p className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Active Region</p>
               <p className="text-xs font-bold text-white">{matchedLocality}</p>
             </div>
           </div>
         </div>
 
-        {/* Quick Locality Bar */}
-        <div className="pt-2 border-t border-teal-700/50 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 text-xs">
+        {/* Quick Locality Selector */}
+        <div className="pt-2 border-t border-slate-800 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 text-xs">
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 scrollbar-none">
-            <span className="text-teal-200/80 shrink-0 mr-1 font-medium">Quick Cities:</span>
+            <span className="text-slate-400 shrink-0 mr-1 font-medium">Select Region:</span>
             {SUPPORTED_LOCALITIES.slice(0, 5).map((loc) => (
               <button
                 key={loc.city}
                 onClick={() => handleSelectQuickCity(loc.city)}
                 className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors shrink-0 ${
                   selectedLocality.toLowerCase().includes(loc.city.toLowerCase())
-                    ? "bg-teal-400 text-teal-950 font-bold"
-                    : "bg-white/10 text-white hover:bg-white/20"
+                    ? "bg-teal-500 text-slate-950 font-bold"
+                    : "bg-slate-800 text-slate-200 hover:bg-slate-700"
                 }`}
               >
                 {loc.city}
@@ -118,15 +110,15 @@ export function AdvisoriesHub({
               placeholder="City or 6-digit Pincode..."
               value={customInput}
               onChange={(e) => setCustomInput(e.target.value)}
-              className="h-8 text-xs bg-white/10 border-white/20 text-white placeholder:text-teal-200/50 focus:bg-white focus:text-gray-900 rounded-lg w-44"
+              className="h-8 text-xs bg-slate-800 border-slate-700 text-white placeholder:text-slate-500 focus:bg-slate-900 focus:text-white rounded-lg w-44"
             />
             <Button
               type="submit"
               size="sm"
               variant="secondary"
-              className="h-8 text-xs bg-teal-400 hover:bg-teal-300 text-teal-950 font-semibold"
+              className="h-8 text-xs bg-teal-500 hover:bg-teal-400 text-slate-950 font-semibold"
             >
-              Search
+              Filter
             </Button>
           </form>
         </div>
@@ -138,27 +130,24 @@ export function AdvisoriesHub({
           onClick={() => setActiveTab("outbreaks")}
           className={`px-4 py-2 text-xs font-bold rounded-lg transition-colors flex items-center gap-2 ${
             activeTab === "outbreaks"
-              ? "bg-teal-600 text-white shadow-sm"
+              ? "bg-teal-700 text-white shadow-sm"
               : "text-gray-600 hover:bg-gray-100"
           }`}
         >
           <AlertTriangle className="h-3.5 w-3.5" />
-          <span>Regional Disease Alerts ({advisories.length})</span>
-          {highSeverityCount > 0 && (
-            <span className="h-2 w-2 rounded-full bg-rose-400 animate-pulse" />
-          )}
+          <span>Regional Health Notices ({advisories.length})</span>
         </button>
 
         <button
           onClick={() => setActiveTab("precautions")}
           className={`px-4 py-2 text-xs font-bold rounded-lg transition-colors flex items-center gap-2 ${
             activeTab === "precautions"
-              ? "bg-teal-600 text-white shadow-sm"
+              ? "bg-teal-700 text-white shadow-sm"
               : "text-gray-600 hover:bg-gray-100"
           }`}
         >
-          <HeartPulse className="h-3.5 w-3.5" />
-          <span>Personalized Condition Precautions ({matchedPrecautions.length})</span>
+          <BookOpen className="h-3.5 w-3.5" />
+          <span>Public Health Reference Excerpts ({matchedGuidance.length})</span>
         </button>
       </div>
 
@@ -167,10 +156,10 @@ export function AdvisoriesHub({
         <div className="space-y-4">
           <div className="flex items-center justify-between text-xs text-muted-foreground">
             <p>
-              Showing active public health notices reported for <strong>{matchedLocality}</strong>:
+              Notices referenced for <strong>{matchedLocality}</strong>:
             </p>
-            <span className="text-[11px] bg-gray-100 px-2 py-0.5 rounded text-gray-600 font-mono">
-              Surveillance Source: Municipal &amp; State Bulletins
+            <span className="text-[11px] bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded font-medium">
+              Prototype Demonstration Digest
             </span>
           </div>
 
@@ -187,7 +176,7 @@ export function AdvisoriesHub({
                 }`}
               >
                 <CardHeader className="pb-2.5">
-                  <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-start justify-between gap-2 flex-wrap">
                     <div className="flex items-center gap-2">
                       {advisory.category === "vector_borne" && (
                         <Droplets className="h-4 w-4 text-teal-600 shrink-0" />
@@ -209,17 +198,14 @@ export function AdvisoriesHub({
                       </Badge>
                     </div>
 
-                    <Badge
-                      className={`text-[10px] uppercase font-bold tracking-wider ${
-                        advisory.severity === "high"
-                          ? "bg-rose-600 hover:bg-rose-700 text-white"
-                          : advisory.severity === "moderate"
-                          ? "bg-amber-600 hover:bg-amber-700 text-white"
-                          : "bg-slate-600 text-white"
-                      }`}
-                    >
-                      {advisory.severity} Alert
-                    </Badge>
+                    {advisory.is_sample_demo && (
+                      <Badge
+                        variant="secondary"
+                        className="text-[10px] bg-amber-100 text-amber-900 border border-amber-300 font-semibold"
+                      >
+                        Sample data for demonstration
+                      </Badge>
+                    )}
                   </div>
 
                   <CardTitle className="text-base font-bold text-gray-900 mt-2">
@@ -238,7 +224,7 @@ export function AdvisoriesHub({
                   <div className="space-y-1">
                     <span className="font-bold text-gray-800 text-[11px] uppercase tracking-wider flex items-center gap-1">
                       <Thermometer className="h-3 w-3 text-rose-500" />
-                      Key Symptoms to Monitor:
+                      Symptoms Described in Public Notice:
                     </span>
                     <ul className="list-disc pl-5 space-y-0.5 text-gray-600">
                       {advisory.symptoms.map((symptom, idx) => (
@@ -248,28 +234,37 @@ export function AdvisoriesHub({
                   </div>
 
                   <div className="space-y-1">
-                    <span className="font-bold text-gray-800 text-[11px] uppercase tracking-wider flex items-center gap-1">
-                      <ShieldCheck className="h-3 w-3 text-teal-600" />
-                      Recommended Precautions:
+                    <span className="font-bold text-gray-800 text-[11px] uppercase tracking-wider">
+                      Official Preventive Measures:
                     </span>
                     <ul className="space-y-1 text-gray-700">
                       {advisory.precautions.map((precaution, idx) => (
                         <li key={idx} className="flex items-start gap-1.5">
-                          <span className="text-teal-600 font-bold shrink-0">✓</span>
+                          <span className="text-teal-700 font-bold shrink-0">•</span>
                           <span>{precaution}</span>
                         </li>
                       ))}
                     </ul>
                   </div>
 
-                  <div className="pt-2 border-t border-gray-100 flex items-center justify-between text-[11px] text-muted-foreground">
-                    <span className="flex items-center gap-1">
-                      <Calendar className="h-3 w-3" />
-                      Updated: {advisory.lastUpdated}
-                    </span>
-                    <span className="capitalize font-medium">
-                      Trend: {advisory.reportedTrend}
-                    </span>
+                  {/* Verifiable Source Footer */}
+                  <div className="pt-2 border-t border-gray-200/80 space-y-1.5 text-[11px] text-gray-600">
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="font-semibold text-gray-800">Source Document:</span>
+                      <a
+                        href={advisory.source_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-teal-700 hover:text-teal-800 underline inline-flex items-center gap-1 text-right"
+                      >
+                        <span className="truncate max-w-[220px]">{advisory.source_title}</span>
+                        <ExternalLink className="h-3 w-3 shrink-0" />
+                      </a>
+                    </div>
+                    <div className="flex items-center justify-between text-[10px] text-gray-500">
+                      <span>Report Date: {advisory.report_date}</span>
+                      <span>Retrieved: {advisory.retrieved_at}</span>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -278,91 +273,99 @@ export function AdvisoriesHub({
         </div>
       )}
 
-      {/* TAB 2: PERSONALIZED CONDITION PRECAUTIONS */}
+      {/* TAB 2: OFFICIAL PUBLIC HEALTH REFERENCE EXCERPTS */}
       {activeTab === "precautions" && (
         <div className="space-y-4">
-          <div className="bg-teal-50/60 border border-teal-200 rounded-xl p-4 text-xs text-teal-950 space-y-1.5">
-            <div className="flex items-center gap-2 font-bold text-teal-900">
-              <ShieldCheck className="h-4 w-4 text-teal-600" />
-              <span>Grounded in Your Patient-Confirmed Health Profile</span>
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-xs text-slate-800 space-y-1.5">
+            <div className="flex items-center gap-2 font-bold text-slate-900">
+              <BookOpen className="h-4 w-4 text-teal-700" />
+              <span>Official Public Health Guidelines (Cited Excerpts Only)</span>
             </div>
             <p className="leading-relaxed">
-              These clinical guidance notes are tailored to the diagnoses and drug allergies you have
-              confirmed in your MedAnchor summary. They help you stay ahead of potential drug interactions
-              and seasonal vulnerability triggers.
+              Below are quoted excerpts from published national clinical guidelines matching diagnoses
+              confirmed in your records. MedAnchor does not author instructions or medical rules.
             </p>
           </div>
 
-          <div className="space-y-4">
-            {matchedPrecautions.map((precaution, idx) => (
-              <Card key={idx} className="border shadow-sm">
-                <CardHeader className="pb-3 border-b bg-gray-50/50">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Activity className="h-4 w-4 text-teal-600" />
-                      <CardTitle className="text-base font-bold text-gray-900">
-                        {precaution.matchedTitle}
-                      </CardTitle>
+          {matchedGuidance.length === 0 ? (
+            <Card className="border border-dashed border-gray-300 p-8 text-center text-xs text-gray-500">
+              <FileText className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+              <p className="font-semibold text-gray-700">No condition-specific public health excerpts matched</p>
+              <p className="mt-1">
+                Upload and confirm clinical documents (prescriptions or discharge summaries) to view relevant official reference links.
+              </p>
+              <p className="mt-2 font-medium text-teal-800">
+                Always consult your treating physician regarding your prescribed medicines.
+              </p>
+            </Card>
+          ) : (
+            <div className="space-y-4">
+              {matchedGuidance.map((guidance) => (
+                <Card key={guidance.id} className="border shadow-sm">
+                  <CardHeader className="pb-3 border-b bg-gray-50/50">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <CardTitle className="text-base font-bold text-gray-900">
+                          {guidance.targetCondition}
+                        </CardTitle>
+                        <p className="text-xs text-gray-500 font-medium">
+                          Category: {guidance.clinicalCategory}
+                        </p>
+                      </div>
+                      <Badge variant="outline" className="text-[10px] text-teal-800 border-teal-300 bg-teal-50">
+                        Official Excerpt
+                      </Badge>
                     </div>
-                    <Badge variant="outline" className="text-[10px] font-semibold capitalize">
-                      {precaution.category}
-                    </Badge>
-                  </div>
-                </CardHeader>
+                  </CardHeader>
 
-                <CardContent className="pt-4 space-y-3.5 text-xs">
-                  {precaution.outbreakVulnerabilityNote && (
-                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-900 text-xs font-medium leading-relaxed">
-                      {precaution.outbreakVulnerabilityNote}
+                  <CardContent className="pt-4 space-y-3.5 text-xs">
+                    {/* Quoted Excerpt */}
+                    <div className="p-3 bg-slate-50 border-l-4 border-teal-600 rounded-r-lg text-gray-800 leading-relaxed italic">
+                      &ldquo;{guidance.officialCitation.verbatim_excerpt}&rdquo;
                     </div>
-                  )}
 
-                  <div className="space-y-1.5">
-                    <span className="font-bold text-gray-900 text-xs uppercase tracking-wider block">
-                      Daily Care &amp; Health Precautions:
-                    </span>
-                    <ul className="space-y-1.5 text-gray-700">
-                      {precaution.dailyPrecautions.map((item, pIdx) => (
-                        <li key={pIdx} className="flex items-start gap-2">
-                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0 mt-0.5" />
-                          <span className="leading-relaxed">{item}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  {precaution.redFlags && precaution.redFlags.length > 0 && (
-                    <div className="space-y-1.5 pt-2 border-t">
-                      <span className="font-bold text-rose-700 text-xs uppercase tracking-wider flex items-center gap-1.5">
-                        <AlertCircle className="h-3.5 w-3.5 text-rose-600" />
-                        Red-Flag Warning Signs (Seek Immediate Medical Care):
-                      </span>
-                      <ul className="space-y-1 text-gray-700">
-                        {precaution.redFlags.map((flag, fIdx) => (
-                          <li key={fIdx} className="flex items-start gap-2">
-                            <span className="text-rose-600 font-bold shrink-0">•</span>
-                            <span className="leading-relaxed">{flag}</span>
-                          </li>
-                        ))}
-                      </ul>
+                    {/* Source Citation */}
+                    <div className="space-y-1 text-[11px] text-gray-600">
+                      <p>
+                        <strong>Source:</strong> {guidance.officialCitation.source_organization} ({guidance.officialCitation.publication_year})
+                      </p>
+                      <p>
+                        <strong>Publication:</strong> {guidance.officialCitation.document_title}
+                      </p>
+                      <p>
+                        <a
+                          href={guidance.officialCitation.source_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-teal-700 hover:text-teal-800 underline inline-flex items-center gap-1 font-medium mt-1"
+                        >
+                          View Official Document
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      </p>
                     </div>
-                  )}
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+
+                    {/* Non-Negotiable Physician Notice */}
+                    <div className="pt-2 border-t border-gray-100 flex items-center gap-2 text-rose-800 bg-rose-50/60 p-2.5 rounded-lg font-semibold">
+                      <Info className="h-4 w-4 shrink-0 text-rose-600" />
+                      <span>{guidance.mandatoryPhysicianNotice}</span>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
-      {/* Safety & Assistive Disclaimer */}
+      {/* Assistive Boundary Notice */}
       <Card className="border border-slate-200 bg-slate-50 text-xs text-slate-700">
         <CardContent className="p-4 flex items-start gap-3">
           <Info className="h-4 w-4 text-slate-500 shrink-0 mt-0.5" />
           <p className="leading-relaxed">
-            <strong>Assistive Public Health Guidance:</strong> MedAnchor organizes verified clinical document excerpts
-            and public health notifications. This platform does not provide automated diagnoses, evaluate raw symptoms,
-            or alter prescriptions. Always consult a licensed healthcare professional for medical diagnosis or before changing
-            any medical regimen.
+            <strong>Assistive Boundary Notice:</strong> MedAnchor organizes document excerpts and links to official public health references.
+            This service does not provide clinical diagnoses, evaluate active symptoms, or recommend medication changes.
+            Always consult your treating physician or a qualified healthcare professional.
           </p>
         </CardContent>
       </Card>
