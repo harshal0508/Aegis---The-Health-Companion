@@ -455,7 +455,7 @@ export function HealthSummaryView() {
                   </span>
                 </div>
 
-              <CardContent className="p-0 divide-y divide-gray-100">
+                <div className="p-0 divide-y divide-slate-100">
                 {categoryItems.length === 0 ? (
                   <div className="py-6 px-5 text-sm text-gray-500 italic bg-white">
                     {config.emptyText}
