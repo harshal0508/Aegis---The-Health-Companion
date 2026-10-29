@@ -285,10 +285,10 @@ export function transformIdspToDiseaseAdvisory(
   }
 
   const weekStr = item.weekNumber ? `Week ${item.weekNumber}` : "Latest Weekly Bulletin";
-  const sourceTitle = `IDSP Surveillance Bulletin (${weekStr}) - ${item.state}`;
+  const sourceTitle = `NCDC / IDSP Surveillance Bulletin (${weekStr}) - ${item.state}`;
   const sourceUrl =
     item.sourceUrl ||
-    "https://idsp.mohfw.gov.in/index4.php?lang=1&level=0&linkid=406&lid=3689";
+    "https://ncdc.mohfw.gov.in/";
 
   return {
     id: `idsp-${resolved.district.toLowerCase().replace(/\s+/g, "-")}-${item.diseaseName.toLowerCase().replace(/[^a-z0-9]/g, "-")}-${index}`,

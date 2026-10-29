@@ -60,7 +60,7 @@ describe("IDSP Weekly Outbreak Ingestion Pipeline (Approach 1)", () => {
       expect(advisory.headline).toContain("64 cases reported in Pune");
       expect(advisory.summary).toContain("PMC anti-larval drive");
       expect(advisory.source_title).toContain("IDSP Surveillance Bulletin (Week 42) - Maharashtra");
-      expect(advisory.source_url).toContain("idsp.mohfw.gov.in");
+      expect(advisory.source_url).toContain("ncdc.mohfw.gov.in");
       expect(advisory.is_sample_demo).toBe(false); // Real official data!
     });
 
