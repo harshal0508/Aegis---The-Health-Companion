@@ -142,11 +142,33 @@ export function AdvisoriesHub({
   );
   const matchedGuidance = matchConfirmedPrecautions(confirmedItems);
 
-  // Live district news scanner is disabled per safety directive
+  // Fetch live district news whenever canonical district changes
   useEffect(() => {
-    setNewsArticles([]);
-    setLoadingNews(false);
-  }, []);
+    let isMounted = true;
+    async function loadNews() {
+      setLoadingNews(true);
+      try {
+        const queryDistrict = currentLocality.district || currentLocality.city || "Indore";
+        const res = await fetch(
+          `/api/advisories/news?district=${encodeURIComponent(queryDistrict)}&pincode=${encodeURIComponent(
+            currentLocality.pincode
+          )}`
+        );
+        const data = await res.json();
+        if (isMounted && data.articles) {
+          setNewsArticles(data.articles);
+        }
+      } catch (e) {
+        console.warn("[AdvisoriesHub] Failed to fetch news:", e);
+      } finally {
+        if (isMounted) setLoadingNews(false);
+      }
+    }
+    loadNews();
+    return () => {
+      isMounted = false;
+    };
+  }, [currentLocality.district, currentLocality.pincode, currentLocality.city]);
 
   const handleSelectQuickCity = (cityOrPin: string) => {
     const resolved = resolveIndianLocality(cityOrPin);
@@ -366,6 +388,27 @@ export function AdvisoriesHub({
         </button>
 
         <button
+          onClick={() => setActiveTab("news")}
+          className={`px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-2 whitespace-nowrap ${
+            activeTab === "news"
+              ? "bg-white text-slate-900 shadow-xs"
+              : "text-slate-600 hover:text-slate-900"
+          }`}
+        >
+          <Newspaper className="h-3.5 w-3.5 text-amber-600" />
+          <span>Local Press Radar</span>
+          <span
+            className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+              activeTab === "news"
+                ? "bg-amber-50 text-amber-800 border border-amber-200/80"
+                : "bg-slate-200/80 text-slate-600"
+            }`}
+          >
+            {loadingNews ? "..." : newsArticles.length}
+          </span>
+        </button>
+
+        <button
           onClick={() => setActiveTab("guidelines")}
           className={`px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-2 whitespace-nowrap ${
             activeTab === "guidelines"
@@ -553,7 +596,7 @@ export function AdvisoriesHub({
                         {article.publishedAt}
                       </span>
                     </div>
-                    <h2 className="text-sm font-bold text-slate-900 leading-snug">
+                    <h2 className="text-base font-serif font-medium text-slate-900 leading-snug">
                       {article.title}
                     </h2>
                     <p className="text-slate-600 leading-relaxed text-xs">
@@ -563,7 +606,7 @@ export function AdvisoriesHub({
 
                   <div className="pt-2.5 border-t border-slate-100 flex items-center justify-between">
                     <span className="text-[10px] text-amber-800 bg-amber-50/70 px-2 py-0.5 rounded-full font-medium border border-amber-200/80">
-                      Verified Press Article
+                      Regional Press Report
                     </span>
                     <a
                       href={article.url}
