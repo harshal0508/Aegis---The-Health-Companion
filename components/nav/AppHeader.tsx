@@ -35,14 +35,9 @@ export function AppHeader() {
             <Activity className="h-5 w-5" />
           </div>
           <div>
-            <div className="flex items-center gap-1.5">
-              <span className="font-extrabold text-base tracking-tight text-slate-900 leading-none">
-                MedAnchor
-              </span>
-              <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 bg-teal-50 text-teal-700 border border-teal-200/80 rounded-md">
-                Clinical
-              </span>
-            </div>
+            <span className="font-extrabold text-base tracking-tight text-slate-900 leading-none block">
+              MedAnchor
+            </span>
             <p className="text-[10px] text-slate-400 font-medium leading-none mt-1">
               Patient-Owned Health Platform
             </p>
