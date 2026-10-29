@@ -44,7 +44,7 @@ export function AppHeader() {
         </Link>
 
         {/* Desktop Navigation Links */}
-        <nav className="hidden md:flex items-center gap-1" aria-label="Desktop navigation">
+        <nav className="hidden md:flex items-center gap-1.5" aria-label="Desktop navigation">
           {NAV_LINKS.map(({ href, label }) => {
             const isActive = pathname === href || (href !== "/home" && pathname.startsWith(href + "/"));
             return (
@@ -52,10 +52,10 @@ export function AppHeader() {
                 key={href}
                 href={href}
                 className={cn(
-                  "px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all",
+                  "px-4 py-2 rounded-full text-sm transition-all",
                   isActive
-                    ? "bg-teal-50 text-teal-800 border border-teal-200/80 shadow-2xs"
-                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-100/70"
+                    ? "bg-teal-50 text-teal-800 font-semibold border border-teal-200/80 shadow-2xs"
+                    : "text-slate-600 font-medium hover:text-slate-900 hover:bg-slate-100/70"
                 )}
                 aria-current={isActive ? "page" : undefined}
               >
@@ -72,7 +72,7 @@ export function AppHeader() {
           <Link
             href="/emergency"
             className={cn(
-              "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all shadow-2xs",
+              "flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-bold transition-all shadow-2xs",
               isEmergencyPage
                 ? "bg-rose-100 text-rose-800 border border-rose-300 ring-2 ring-rose-500/20"
                 : "bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100"
