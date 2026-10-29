@@ -103,6 +103,33 @@ describe("IDSP Weekly Outbreak Ingestion Pipeline (Approach 1)", () => {
       expect(idspRecord?.headline).toContain("64 cases");
     });
 
+    it("returns district-specific IDSP records for Bengaluru by PIN (560001)", () => {
+      const result = getAdvisoriesForLocality("560001");
+      expect(result.advisories.length).toBeGreaterThanOrEqual(2);
+      expect(result.matchedLocality).toContain("Bengaluru");
+
+      const dengue = result.advisories.find((a) => a.name.includes("Dengue"));
+      expect(dengue).toBeDefined();
+      expect(dengue?.headline).toContain("52 cases reported in Bengaluru (Karnataka)");
+      expect(dengue?.is_sample_demo).toBe(false);
+
+      const add = result.advisories.find((a) => a.name.includes("Diarrheal") || a.name.includes("ADD"));
+      expect(add).toBeDefined();
+      expect(add?.headline).toContain("26 cases reported in Bengaluru (Karnataka)");
+      expect(add?.is_sample_demo).toBe(false);
+
+      // Verify NO sample prototype records are returned for Bengaluru
+      expect(result.advisories.every((a) => a.is_sample_demo === false)).toBe(true);
+    });
+
+    it("returns distinct records across multiple cities", () => {
+      const cities = ["560001", "411001", "400001", "110001", "500001", "302001"];
+      const headlines = cities.map((c) => getAdvisoriesForLocality(c).advisories[0].headline);
+      // Ensure all headlines are unique across different cities
+      const uniqueHeadlines = new Set(headlines);
+      expect(uniqueHeadlines.size).toBe(cities.length);
+    });
+
     it("all items in OFFICIAL_IDSP_WEEKLY_BASELINE transform without errors", () => {
       for (let i = 0; i < OFFICIAL_IDSP_WEEKLY_BASELINE.length; i++) {
         const item = OFFICIAL_IDSP_WEEKLY_BASELINE[i];

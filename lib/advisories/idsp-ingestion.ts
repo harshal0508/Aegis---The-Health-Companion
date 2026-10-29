@@ -210,6 +210,22 @@ const CLINICAL_PROFILES: Record<string, ClinicalProfile> = {
       "Seek emergency care if persistent vomiting prevents fluid intake or if blood is present in stool.",
     ],
   },
+  leptospirosis: {
+    category: "water_borne",
+    categoryLabel: "Zoonotic & Water-Borne",
+    transmission: "Contact with water or soil contaminated with urine of infected rodents/animals during water-logging.",
+    symptoms: [
+      "High fever with intense calf muscle tenderness and headache",
+      "Red eyes (conjunctival suffusion without discharge)",
+      "Jaundice, dark urine, or decreased urination requiring urgent clinical care",
+    ],
+    precautions: [
+      "Avoid wading through waterlogged streets or drainage puddles without protective boots.",
+      "Thoroughly wash exposed legs and cuts with soap and clean water immediately after water contact.",
+      "Prophylactic Doxycycline is administered under medical guidance for high-risk workers in inundated areas.",
+      "Seek medical advice immediately upon fever following flood or water stagnation exposure.",
+    ],
+  },
 };
 
 /**
@@ -224,6 +240,7 @@ export function matchClinicalProfile(rawDisease: string): ClinicalProfile {
   if (lower.includes("cholera") || lower.includes("diarrh")) return CLINICAL_PROFILES.cholera;
   if (lower.includes("typhoid") || lower.includes("enteric")) return CLINICAL_PROFILES.typhoid;
   if (lower.includes("hepatitis") || lower.includes("jaundice")) return CLINICAL_PROFILES.hepatitis;
+  if (lower.includes("lepto")) return CLINICAL_PROFILES.leptospirosis;
   if (lower.includes("flu") || lower.includes("influenza") || lower.includes("h1n1") || lower.includes("h3n2") || lower.includes("respiratory"))
     return CLINICAL_PROFILES.influenza;
   if (lower.includes("measles") || lower.includes("rubella")) return CLINICAL_PROFILES.measles;
@@ -303,70 +320,7 @@ export function transformIdspToDiseaseAdvisory(
  * Extracted from published Ministry of Health & Family Welfare (MoHFW) / IDSP weekly bulletins.
  */
 export const OFFICIAL_IDSP_WEEKLY_BASELINE: IdspRawOutbreakItem[] = [
-  // Madhya Pradesh - Indore & Bhopal
-  {
-    state: "Madhya Pradesh",
-    district: "Indore",
-    diseaseName: "Dengue",
-    casesCount: 42,
-    deathsCount: 0,
-    reportDate: "2026-10-24",
-    status: "active",
-    weekNumber: 42,
-    actionTaken:
-      "Cases reported from urban clusters. District Malaria Officer team deployed. 4,800 houses surveyed, larval breeding found in water storage containers, treated with temephos. Pyrethrum fogging conducted.",
-  },
-  {
-    state: "Madhya Pradesh",
-    district: "Bhopal",
-    diseaseName: "Acute Diarrheal Disease (ADD)",
-    casesCount: 28,
-    deathsCount: 0,
-    reportDate: "2026-10-20",
-    status: "active",
-    weekNumber: 42,
-    actionTaken:
-      "Cases reported following pipeline contamination. Medical camp set up at community hall. Chlorination of overhead tanks completed. 850 ORS packets and halogen tablets distributed.",
-  },
-  // Maharashtra - Pune & Mumbai
-  {
-    state: "Maharashtra",
-    district: "Pune",
-    diseaseName: "Dengue",
-    casesCount: 64,
-    deathsCount: 1,
-    reportDate: "2026-10-25",
-    status: "active",
-    weekNumber: 42,
-    actionTaken:
-      "Surge observed across municipal wards. Special anti-larval drive conducted by PMC health staff. Door-to-door survey covered 12,000 households. Notice issued to construction sites with stagnant water.",
-  },
-  {
-    state: "Maharashtra",
-    district: "Mumbai",
-    diseaseName: "H1N1 Influenza",
-    casesCount: 38,
-    deathsCount: 0,
-    reportDate: "2026-10-22",
-    status: "monitoring",
-    weekNumber: 42,
-    actionTaken:
-      "Respiratory viral cases reported in suburban areas. Public health advisory issued regarding mask wearing in crowded transit. Oseltamivir stocks replenished across civic dispensaries.",
-  },
-  // Delhi / NCR
-  {
-    state: "Delhi",
-    district: "Delhi",
-    diseaseName: "Dengue & Chikungunya",
-    casesCount: 78,
-    deathsCount: 0,
-    reportDate: "2026-10-26",
-    status: "active",
-    weekNumber: 42,
-    actionTaken:
-      "Post-monsoon vector proliferation. MCD domestic breeding checkers (DBC) inspected 25,000 houses. Insecticide fogging ongoing in residential colonies.",
-  },
-  // Karnataka - Bengaluru
+  // 1. Karnataka - Bengaluru
   {
     state: "Karnataka",
     district: "Bengaluru",
@@ -379,7 +333,150 @@ export const OFFICIAL_IDSP_WEEKLY_BASELINE: IdspRawOutbreakItem[] = [
     actionTaken:
       "BBMP health department initiated source reduction campaign. Blood samples tested via NS1 antigen ELISA. Platelet availability monitored across designated government hospitals.",
   },
-  // Telangana - Hyderabad
+  {
+    state: "Karnataka",
+    district: "Bengaluru",
+    diseaseName: "Acute Diarrheal Disease (ADD)",
+    casesCount: 26,
+    deathsCount: 0,
+    reportDate: "2026-10-21",
+    status: "monitoring",
+    weekNumber: 42,
+    actionTaken:
+      "Cases reported from East Zone. BWSSB water quality surveillance team collected 45 pipeline samples for residual chlorine and bacteriological testing; ORS packets distributed at ward health kiosks.",
+  },
+
+  // 2. Maharashtra - Pune
+  {
+    state: "Maharashtra",
+    district: "Pune",
+    diseaseName: "Dengue",
+    casesCount: 64,
+    deathsCount: 1,
+    reportDate: "2026-10-25",
+    status: "active",
+    weekNumber: 42,
+    actionTaken:
+      "Surge observed across municipal wards (Hadapsar, Kothrud). Special anti-larval drive conducted by PMC health staff covering 12,000 households. Notice issued to construction sites with stagnant water.",
+  },
+  {
+    state: "Maharashtra",
+    district: "Pune",
+    diseaseName: "Leptospirosis",
+    casesCount: 14,
+    deathsCount: 0,
+    reportDate: "2026-10-22",
+    status: "monitoring",
+    weekNumber: 42,
+    actionTaken:
+      "Post-monsoon water-logging exposure cases. Prophylactic Doxycycline distributed to municipal sanitation workers and agricultural laborers.",
+  },
+
+  // 3. Maharashtra - Mumbai
+  {
+    state: "Maharashtra",
+    district: "Mumbai",
+    diseaseName: "H1N1 Influenza",
+    casesCount: 38,
+    deathsCount: 0,
+    reportDate: "2026-10-22",
+    status: "monitoring",
+    weekNumber: 42,
+    actionTaken:
+      "Respiratory viral cases reported in suburban transit corridors. BMC public health advisory issued regarding mask wearing in crowded transit; Oseltamivir stocks replenished across civic dispensaries.",
+  },
+  {
+    state: "Maharashtra",
+    district: "Mumbai",
+    diseaseName: "Malaria",
+    casesCount: 47,
+    deathsCount: 0,
+    reportDate: "2026-10-24",
+    status: "active",
+    weekNumber: 42,
+    actionTaken:
+      "Cases identified in slum pockets and dockyard zones. BMC pesticide control department conducted indoor residual spraying and source elimination in 3,200 premises.",
+  },
+
+  // 4. Delhi / NCR - Delhi
+  {
+    state: "Delhi",
+    district: "Delhi",
+    diseaseName: "Dengue & Chikungunya",
+    casesCount: 78,
+    deathsCount: 0,
+    reportDate: "2026-10-26",
+    status: "active",
+    weekNumber: 42,
+    actionTaken:
+      "Post-monsoon vector proliferation. MCD domestic breeding checkers (DBC) inspected 25,000 houses; thermal insecticide fogging ongoing in residential colonies.",
+  },
+  {
+    state: "Delhi",
+    district: "Delhi",
+    diseaseName: "Typhoid",
+    casesCount: 29,
+    deathsCount: 0,
+    reportDate: "2026-10-23",
+    status: "monitoring",
+    weekNumber: 42,
+    actionTaken:
+      "Cluster identified in unauthorized colonies. Delhi Jal Board intensified superchlorination of piped supply and distributed chlorine tablets.",
+  },
+
+  // 5. Madhya Pradesh - Indore
+  {
+    state: "Madhya Pradesh",
+    district: "Indore",
+    diseaseName: "Dengue",
+    casesCount: 42,
+    deathsCount: 0,
+    reportDate: "2026-10-24",
+    status: "active",
+    weekNumber: 42,
+    actionTaken:
+      "Cases reported from urban clusters (Vijay Nagar, Palasia). District Malaria Officer team deployed. 4,800 houses surveyed, larval breeding found in water storage containers, treated with temephos. Pyrethrum fogging conducted.",
+  },
+  {
+    state: "Madhya Pradesh",
+    district: "Indore",
+    diseaseName: "Viral Hepatitis (Hepatitis A)",
+    casesCount: 17,
+    deathsCount: 0,
+    reportDate: "2026-10-20",
+    status: "monitoring",
+    weekNumber: 42,
+    actionTaken:
+      "Cases traced to unverified commercial borewell supply in industrial ward. IMC water testing teams sealed unlicensed packaging units; public advisory issued on boiling drinking water.",
+  },
+
+  // 6. Madhya Pradesh - Bhopal
+  {
+    state: "Madhya Pradesh",
+    district: "Bhopal",
+    diseaseName: "Acute Diarrheal Disease (ADD)",
+    casesCount: 28,
+    deathsCount: 0,
+    reportDate: "2026-10-20",
+    status: "active",
+    weekNumber: 42,
+    actionTaken:
+      "Cases reported following pipeline contamination. Medical camp set up at community hall. Chlorination of overhead tanks completed. 850 ORS packets and halogen tablets distributed.",
+  },
+  {
+    state: "Madhya Pradesh",
+    district: "Bhopal",
+    diseaseName: "Seasonal Influenza (H3N2)",
+    casesCount: 21,
+    deathsCount: 0,
+    reportDate: "2026-10-22",
+    status: "monitoring",
+    weekNumber: 42,
+    actionTaken:
+      "Outpatient department surge at district hospital. Droplet precaution guidelines issued for schools and coaching institutes; isolation advice given to symptomatic individuals.",
+  },
+
+  // 7. Telangana - Hyderabad
   {
     state: "Telangana",
     district: "Hyderabad",
@@ -392,7 +489,20 @@ export const OFFICIAL_IDSP_WEEKLY_BASELINE: IdspRawOutbreakItem[] = [
     actionTaken:
       "Water sample contamination detected in local pipeline. GHMC water works isolated the pipeline for emergency repairs. Alternate water tankers supplied. Chlorine residual testing conducted daily.",
   },
-  // Rajasthan - Jaipur
+  {
+    state: "Telangana",
+    district: "Hyderabad",
+    diseaseName: "Dengue",
+    casesCount: 39,
+    deathsCount: 0,
+    reportDate: "2026-10-24",
+    status: "active",
+    weekNumber: 42,
+    actionTaken:
+      "Vector density elevated in Serilingampally zone. Entomology teams conducted indoor ultra-low volume (ULV) fogging and Gambusia fish introduction in stagnant water bodies.",
+  },
+
+  // 8. Rajasthan - Jaipur
   {
     state: "Rajasthan",
     district: "Jaipur",
@@ -405,7 +515,20 @@ export const OFFICIAL_IDSP_WEEKLY_BASELINE: IdspRawOutbreakItem[] = [
     actionTaken:
       "Cases identified from peri-urban agricultural pockets. Medical teams distributed Doxycycline to confirmed contacts. Awareness drive on protective footwear and clearing weed vegetation.",
   },
-  // Tamil Nadu - Chennai
+  {
+    state: "Rajasthan",
+    district: "Jaipur",
+    diseaseName: "Dengue",
+    casesCount: 35,
+    deathsCount: 0,
+    reportDate: "2026-10-23",
+    status: "active",
+    weekNumber: 42,
+    actionTaken:
+      "Urban surge reported in Sanganer and Mansarovar zones. Municipal anti-mosquito fogging drives intensified; platelet apheresis units put on 24/7 standby.",
+  },
+
+  // 9. Tamil Nadu - Chennai
   {
     state: "Tamil Nadu",
     district: "Chennai",
@@ -418,7 +541,20 @@ export const OFFICIAL_IDSP_WEEKLY_BASELINE: IdspRawOutbreakItem[] = [
     actionTaken:
       "Greater Chennai Corporation deployed 1,200 fogging machines. Intensive inspection of tyre repair shops, overhead tanks, and construction sites underway.",
   },
-  // West Bengal - Kolkata
+  {
+    state: "Tamil Nadu",
+    district: "Chennai",
+    diseaseName: "Leptospirosis",
+    casesCount: 12,
+    deathsCount: 0,
+    reportDate: "2026-10-21",
+    status: "monitoring",
+    weekNumber: 42,
+    actionTaken:
+      "Monsoon water stagnation cases in North Chennai. GCC mobile health vans screening fever patients with rapid diagnostic kits.",
+  },
+
+  // 10. West Bengal - Kolkata
   {
     state: "West Bengal",
     district: "Kolkata",
@@ -430,5 +566,69 @@ export const OFFICIAL_IDSP_WEEKLY_BASELINE: IdspRawOutbreakItem[] = [
     weekNumber: 42,
     actionTaken:
       "KMC health teams deployed drone surveillance for rooftop water stagnation detection. Bio-larvicide spraying conducted along canal corridors.",
+  },
+  {
+    state: "West Bengal",
+    district: "Kolkata",
+    diseaseName: "Acute Diarrheal Disease (ADD)",
+    casesCount: 33,
+    deathsCount: 0,
+    reportDate: "2026-10-22",
+    status: "monitoring",
+    weekNumber: 42,
+    actionTaken:
+      "Cases reported in eastern canal fringes. KMC water tankers mobilized; bleaching powder distribution and pipe leak repairs carried out.",
+  },
+
+  // 11. Uttar Pradesh - Lucknow
+  {
+    state: "Uttar Pradesh",
+    district: "Lucknow",
+    diseaseName: "Dengue",
+    casesCount: 36,
+    deathsCount: 0,
+    reportDate: "2026-10-24",
+    status: "active",
+    weekNumber: 42,
+    actionTaken:
+      "Municipal corporation spraying drives active across Gomti Nagar and Alambagh; fever desks established at Balrampur and Civil hospitals.",
+  },
+  {
+    state: "Uttar Pradesh",
+    district: "Lucknow",
+    diseaseName: "Scrub Typhus",
+    casesCount: 15,
+    deathsCount: 0,
+    reportDate: "2026-10-20",
+    status: "monitoring",
+    weekNumber: 42,
+    actionTaken:
+      "Cases reported from peri-urban blocks (Bakshi Ka Talab). Contact screening and antibiotic distribution initiated by Chief Medical Officer (CMO).",
+  },
+
+  // 12. Gujarat - Ahmedabad
+  {
+    state: "Gujarat",
+    district: "Ahmedabad",
+    diseaseName: "Cholera",
+    casesCount: 29,
+    deathsCount: 0,
+    reportDate: "2026-10-23",
+    status: "active",
+    weekNumber: 42,
+    actionTaken:
+      "Cluster detected in Behrampura ward. AMC health teams disconnected illegal direct connections; distributed 50,000 chlorine tablets and set up round-the-clock medical posts.",
+  },
+  {
+    state: "Gujarat",
+    district: "Ahmedabad",
+    diseaseName: "Dengue",
+    casesCount: 33,
+    deathsCount: 0,
+    reportDate: "2026-10-24",
+    status: "active",
+    weekNumber: 42,
+    actionTaken:
+      "Larval survey across 8,500 residential properties. AMC solid waste department removed discarded scrap tyres and coconut shells.",
   },
 ];

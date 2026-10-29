@@ -233,16 +233,75 @@ import {
   OFFICIAL_IDSP_WEEKLY_BASELINE,
   transformIdspToDiseaseAdvisory,
 } from "./idsp-ingestion";
+import { resolveIndianLocality } from "./pincode-resolver";
 
 /**
  * Retrieves official government disease advisories and weekly IDSP outbreak reports for a given locality.
- * Prioritizes active weekly IDSP (Integrated Disease Surveillance Programme) outbreak bulletins,
- * accompanied by standard seasonal public health protocols.
+ * Prioritizes active weekly IDSP (Integrated Disease Surveillance Programme) outbreak bulletins.
  */
 export function getAdvisoriesForLocality(
   cityOrPincode: string
 ): { advisories: DiseaseAdvisory[]; matchedLocality: string } {
-  // Gate: Filter out any advisory missing mandatory source metadata
+  const query = (cityOrPincode || "").trim();
+  const resolved = resolveIndianLocality(query || "Indore");
+
+  const targetDistrict = resolved.district.toLowerCase();
+  const targetCity = resolved.city.toLowerCase();
+  const targetState = resolved.state.toLowerCase();
+  const rawLower = query.toLowerCase();
+
+  // 1. Check for official IDSP weekly outbreak reports matching this locality
+  const matchedIdspItems = OFFICIAL_IDSP_WEEKLY_BASELINE.filter((item) => {
+    const itemDist = item.district.toLowerCase();
+    const itemState = item.state.toLowerCase();
+
+    // Check district match (exact, substring, or within target city/raw input)
+    if (
+      itemDist === targetDistrict ||
+      targetDistrict.includes(itemDist) ||
+      itemDist.includes(targetDistrict) ||
+      targetCity.includes(itemDist) ||
+      rawLower.includes(itemDist)
+    ) {
+      return true;
+    }
+
+    return false;
+  });
+
+  if (matchedIdspItems.length > 0) {
+    const idspAdvisories = matchedIdspItems.map((item, idx) =>
+      transformIdspToDiseaseAdvisory(item, idx)
+    );
+    return {
+      advisories: idspAdvisories,
+      matchedLocality: resolved.displayName || `${resolved.district} (${resolved.pincode})`,
+    };
+  }
+
+  // 2. If no district-specific item matched, check if an item matches the state
+  const stateMatchedItems = OFFICIAL_IDSP_WEEKLY_BASELINE.filter(
+    (item) => item.state.toLowerCase() === targetState
+  );
+
+  if (stateMatchedItems.length > 0) {
+    const stateAdvisories = stateMatchedItems.slice(0, 2).map((item, idx) => {
+      const adv = transformIdspToDiseaseAdvisory(item, idx);
+      return {
+        ...adv,
+        id: `idsp-${resolved.district.toLowerCase().replace(/\s+/g, "-")}-state-${idx}`,
+        headline: `${item.casesCount} cases reported in ${item.district} (${item.state}) • Regional Surveillance`,
+        summary: `Surveillance notice active across ${resolved.district} and neighbouring districts by the ${item.state} Directorate of Health Services. ${adv.summary}`,
+        affectedLocalities: [resolved.district, item.state],
+      };
+    });
+    return {
+      advisories: stateAdvisories,
+      matchedLocality: resolved.displayName || `${resolved.district} (${resolved.pincode})`,
+    };
+  }
+
+  // 3. Fallback: return sample regional digest for completely unmapped locations
   const validAdvisories = REGIONAL_DISEASE_ADVISORIES.filter((a) => {
     const hasSource = Boolean(
       a.source_title && a.source_url && a.report_date && a.retrieved_at
@@ -250,72 +309,6 @@ export function getAdvisoriesForLocality(
     return hasSource || a.is_sample_demo;
   });
 
-  const query = (cityOrPincode || "").trim().toLowerCase();
-  const pinPrefix = query.slice(0, 3);
-
-  // 1. Check for official IDSP weekly outbreak reports matching this locality
-  const matchedIdspItems = OFFICIAL_IDSP_WEEKLY_BASELINE.filter((item) => {
-    const dLower = item.district.toLowerCase();
-    const sLower = item.state.toLowerCase();
-    if (query && (dLower.includes(query) || query.includes(dLower) || sLower.includes(query))) {
-      return true;
-    }
-    return false;
-  });
-
-  const idspAdvisories = matchedIdspItems.map((item, idx) =>
-    transformIdspToDiseaseAdvisory(item, idx)
-  );
-
-  if (!query) {
-    const defaultSeasonal = validAdvisories.filter((a) =>
-      a.affectedLocalities.includes("Bhopal")
-    );
-    return {
-      advisories: [...idspAdvisories, ...defaultSeasonal],
-      matchedLocality: "Bhopal (462001)",
-    };
-  }
-
-  // Match 3-digit prefix of a pincode (only when input is numeric)
-  const isPin = /^\d{3,6}$/.test(query);
-  const byPin = isPin
-    ? validAdvisories.filter((a) => a.pincodePrefixes.includes(pinPrefix))
-    : [];
-
-  if (isPin && (byPin.length > 0 || idspAdvisories.length > 0)) {
-    const known = SUPPORTED_LOCALITIES.find((l) => l.pincode.startsWith(pinPrefix));
-    // Prioritize official weekly IDSP records, supplemented by seasonal protocols
-    const combined = [
-      ...idspAdvisories,
-      ...byPin.filter((b) => !idspAdvisories.some((i) => i.id === b.id)),
-    ];
-    return {
-      advisories: combined.length > 0 ? combined : byPin,
-      matchedLocality: known ? `${known.city} (${cityOrPincode})` : `Pincode ${cityOrPincode}`,
-    };
-  }
-
-  // Match by city name
-  const byCity = validAdvisories.filter((a) =>
-    a.affectedLocalities.some((loc) => loc.toLowerCase().includes(query))
-  );
-
-  if (byCity.length > 0 || idspAdvisories.length > 0) {
-    const known = SUPPORTED_LOCALITIES.find((l) =>
-      l.city.toLowerCase().includes(query)
-    );
-    const combined = [
-      ...idspAdvisories,
-      ...byCity.filter((b) => !idspAdvisories.some((i) => i.id === b.id)),
-    ];
-    return {
-      advisories: combined.length > 0 ? combined : byCity,
-      matchedLocality: known ? `${known.city} (${known.pincode})` : cityOrPincode,
-    };
-  }
-
-  // Fallback: return general sample demonstration advisory
   return {
     advisories: validAdvisories.slice(0, 2),
     matchedLocality: `${cityOrPincode} (Sample Regional Digest)`,

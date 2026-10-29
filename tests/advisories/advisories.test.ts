@@ -22,15 +22,15 @@ describe("Aegis · Health Advisories & Official Reference Invariants", () => {
       }
     });
 
-    it("returns sample demonstration advisories for Bhopal", () => {
+    it("returns official surveillance advisories for Bhopal", () => {
       const result = getAdvisoriesForLocality("Bhopal");
       expect(result.advisories.length).toBeGreaterThan(0);
       expect(result.matchedLocality).toContain("Bhopal");
 
-      const dengue = result.advisories.find((a) => a.id === "dengue-surge");
-      expect(dengue).toBeDefined();
-      expect(dengue?.source_title).toContain("National Centre for Disease Control");
-      expect(dengue?.is_sample_demo).toBe(true);
+      const bhopalRecord = result.advisories.find((a) => a.id.includes("bhopal"));
+      expect(bhopalRecord).toBeDefined();
+      expect(bhopalRecord?.source_title).toContain("IDSP");
+      expect(bhopalRecord?.is_sample_demo).toBe(false);
     });
 
     it("resolves Indian 6-digit Pincodes to region (462001 -> Bhopal)", () => {

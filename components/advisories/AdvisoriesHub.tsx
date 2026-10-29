@@ -138,7 +138,7 @@ export function AdvisoriesHub({
 
   // Official IDSP weekly advisories state
   const [officialAdvisories, setOfficialAdvisories] = useState<DiseaseAdvisory[]>(() => {
-    return getAdvisoriesForLocality(currentLocality.pincode || currentLocality.district).advisories;
+    return getAdvisoriesForLocality(currentLocality.district || currentLocality.pincode).advisories;
   });
 
   const matchedGuidance = matchConfirmedPrecautions(confirmedItems);
@@ -148,7 +148,7 @@ export function AdvisoriesHub({
     let isMounted = true;
 
     // 1. Immediate local update from IDSP weekly baseline
-    const local = getAdvisoriesForLocality(currentLocality.pincode || currentLocality.district);
+    const local = getAdvisoriesForLocality(currentLocality.district || currentLocality.pincode);
     setOfficialAdvisories(local.advisories);
 
     // 2. Fetch latest ingested IDSP records from database API
