@@ -585,43 +585,43 @@ export function HealthSummaryView() {
                         >
                           <div className="flex items-start justify-between gap-4">
                             <div className="space-y-1.5 flex-1 min-w-0">
-                              {/* Status indicator: Clean text, zero pill shapes */}
-                              <div className="flex items-center gap-2.5 flex-wrap text-xs">
-                                {item.status === "confirmed" ? (
-                                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700">
-                                    <Check className="h-3 w-3 text-emerald-600" />
-                                    Confirmed
-                                  </span>
-                                ) : item.status === "needs_review" ? (
-                                  <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
-                                    <AlertTriangle className="h-3 w-3 text-amber-600" />
-                                    Needs Review
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-600 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
-                                    <Sparkles className="h-3 w-3 text-teal-600" />
-                                    Extracted from Scan
-                                  </span>
-                                )}
+                              {/* Status banner: Only show for unconfirmed items, edits, or OCR discrepancies */}
+                              {(item.status !== "confirmed" ||
+                                item.source === "patient_entered" ||
+                                item.ocr_check?.state === "disagree" ||
+                                (item.review_reason && item.review_reason.includes("OCR"))) && (
+                                <div className="flex items-center gap-2.5 flex-wrap text-xs">
+                                  {item.status === "needs_review" ? (
+                                    <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                                      <AlertTriangle className="h-3 w-3 text-amber-600" />
+                                      Needs Review
+                                    </span>
+                                  ) : item.status === "extracted" ? (
+                                    <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-600 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                                      <Sparkles className="h-3 w-3 text-teal-600" />
+                                      Extracted from Scan
+                                    </span>
+                                  ) : null}
 
-                                {item.source === "patient_entered" && (
-                                  <span className="text-[11px] text-slate-400">
-                                    • {item.document ? "Edited by you" : "Added manually"}
-                                  </span>
-                                )}
+                                  {item.source === "patient_entered" && (
+                                    <span className="text-[11px] text-slate-400">
+                                      {item.document ? "Edited by you" : "Added manually"}
+                                    </span>
+                                  )}
 
-                                {(item.ocr_check?.state === "disagree" ||
-                                  (item.review_reason &&
-                                    item.review_reason.includes("OCR"))) && (
-                                  <span className="inline-flex items-center gap-1 text-[11px] text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
-                                    <AlertTriangle className="h-3 w-3 text-rose-600" />
-                                    Second reading disagrees:{" "}
-                                    {item.review_reason
-                                      ? item.review_reason.replace(/^OCR disagreement:\s*/i, "")
-                                      : "dose"}
-                                  </span>
-                                )}
-                              </div>
+                                  {(item.ocr_check?.state === "disagree" ||
+                                    (item.review_reason &&
+                                      item.review_reason.includes("OCR"))) && (
+                                    <span className="inline-flex items-center gap-1 text-[11px] text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
+                                      <AlertTriangle className="h-3 w-3 text-rose-600" />
+                                      Second reading disagrees:{" "}
+                                      {item.review_reason
+                                        ? item.review_reason.replace(/^OCR disagreement:\s*/i, "")
+                                        : "dose"}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
 
                               {/* Item Main Value */}
                               {isEditing ? (
