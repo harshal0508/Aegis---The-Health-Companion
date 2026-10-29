@@ -88,6 +88,24 @@ export function OnboardingForm() {
       return;
     }
 
+    // Explicitly provision Self patient in patients table (in addition to database trigger)
+    try {
+      await supabase.from("patients").upsert({
+        id: user.id,
+        account_id: user.id,
+        full_name: data.full_name,
+        dob: data.dob || null,
+        blood_group: selectedBloodGroup || null,
+        emergency_contact_name: data.emergency_contact_name || null,
+        emergency_contact_phone: data.emergency_contact_phone || null,
+        relationship_label: "Self",
+        is_self: true,
+        permission_confirmed_at: new Date().toISOString(),
+      });
+    } catch {
+      // Database trigger trg_profile_sync_self_patient or /api/patients handles auto-provisioning
+    }
+
     router.push("/home");
   };
 

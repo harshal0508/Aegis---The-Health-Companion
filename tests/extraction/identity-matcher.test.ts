@@ -180,6 +180,63 @@ describe("Document Identity Verification Gate (Task A)", () => {
       expectedOutcome: "name_not_found",
       description: "Whitespace name treated as name_not_found",
     },
+
+    // 11. Tricky pairs & edge cases requested by User
+    {
+      name: "Rajesh Kumar Jain vs Rakesh Kumar Jain (shared middle name, 1-char first name diff)",
+      profile: { full_name: "Rakesh Kumar Jain", dob: "1972-04-18" },
+      document: {
+        patient_name_as_printed: "Rajesh Kumar Jain",
+        patient_name_latin: "Rajesh Kumar Jain",
+        patient_dob: "1972-04-18",
+      },
+      expectedOutcome: "mismatch",
+      description: "Shared middle name 'Kumar' cannot override first name mismatch 'Rajesh' vs 'Rakesh'",
+    },
+    {
+      name: "Mother and daughter similar given names (Anita Sharma vs Ankita Sharma)",
+      profile: { full_name: "Anita Sharma", dob: "1968-07-21" },
+      document: {
+        patient_name_as_printed: "Ankita Sharma",
+        patient_name_latin: "Ankita Sharma",
+        patient_dob: null,
+      },
+      expectedOutcome: "mismatch",
+      description: "Close first names Anita vs Ankita differ by 1 letter; zero edit-distance ensures mismatch",
+    },
+    {
+      name: "Hyphenated name matching (Mary-Jane Watson vs Mary Jane Watson)",
+      profile: { full_name: "Mary Jane Watson", dob: "1990-12-05" },
+      document: {
+        patient_name_as_printed: "Mary-Jane Watson",
+        patient_name_latin: "Mary-Jane Watson",
+        patient_dob: "1990-12-05",
+      },
+      expectedOutcome: "match",
+      description: "Punctuation stripping treats hyphenated Mary-Jane as Mary Jane",
+    },
+    {
+      name: "Hyphenated name mismatch (Sarah-Jane Watson vs Mary Jane Watson)",
+      profile: { full_name: "Mary Jane Watson", dob: "1990-12-05" },
+      document: {
+        patient_name_as_printed: "Sarah-Jane Watson",
+        patient_name_latin: "Sarah-Jane Watson",
+        patient_dob: "1990-12-05",
+      },
+      expectedOutcome: "mismatch",
+      description: "Sarah-Jane vs Mary Jane must mismatch despite shared second token Jane",
+    },
+    {
+      name: "Printed name with a middle name the profile lacks (Harshal Kumar Jain vs Harshal Jain)",
+      profile: { full_name: "Harshal Jain", dob: "1995-05-10" },
+      document: {
+        patient_name_as_printed: "Harshal Kumar Jain",
+        patient_name_latin: "Harshal Kumar Jain",
+        patient_dob: "1995-05-10",
+      },
+      expectedOutcome: "match",
+      description: "Additional middle name 'Kumar' on hospital record matches profile having first and last name",
+    },
   ];
 
   testCases.forEach((tc, idx) => {

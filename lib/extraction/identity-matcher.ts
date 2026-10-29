@@ -352,28 +352,27 @@ export function matchPatientIdentity(
   }
 
   // Check Given Name Match
-  // Given name must match at least one profile given name (exact string match OR initial match).
-  // Note: NO edit-distance matching allowed!
+  // RULE: "The given name must match. Surname alone never matches. No edit-distance matching."
+  // The primary first name (profileGivenTokens[0]) must be found in docTokens (exact string match OR initial match).
+  // A shared middle name (e.g. "Kumar" in "Rajesh Kumar Jain" vs "Rakesh Kumar Jain") alone cannot satisfy given name matching if primary first names conflict.
   let givenNameMatched = false;
   let surnameMatched = false;
 
-  // 1. Check if profile given name matches any doc token (exact or initial)
+  const primaryProfileGiven = profileGivenTokens[0];
+
   for (const dt of docTokens) {
-    for (const pg of profileGivenTokens) {
-      if (dt === pg) {
-        givenNameMatched = true;
-        break;
-      }
-      if (isInitial(dt) && initialMatches(dt, pg)) {
-        givenNameMatched = true;
-        break;
-      }
-      if (isInitial(pg) && initialMatches(pg, dt)) {
-        givenNameMatched = true;
-        break;
-      }
+    if (dt === primaryProfileGiven) {
+      givenNameMatched = true;
+      break;
     }
-    if (givenNameMatched) break;
+    if (isInitial(dt) && initialMatches(dt, primaryProfileGiven)) {
+      givenNameMatched = true;
+      break;
+    }
+    if (isInitial(primaryProfileGiven) && initialMatches(primaryProfileGiven, dt)) {
+      givenNameMatched = true;
+      break;
+    }
   }
 
   // 2. Check if profile surname matches any doc token

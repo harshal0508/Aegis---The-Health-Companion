@@ -142,33 +142,11 @@ export function AdvisoriesHub({
   );
   const matchedGuidance = matchConfirmedPrecautions(confirmedItems);
 
-  // Fetch live district news whenever canonical district changes
+  // Live district news scanner is disabled per safety directive
   useEffect(() => {
-    let isMounted = true;
-    async function loadNews() {
-      setLoadingNews(true);
-      try {
-        const queryDistrict = currentLocality.district || currentLocality.city || "Indore";
-        const res = await fetch(
-          `/api/advisories/news?district=${encodeURIComponent(queryDistrict)}&pincode=${encodeURIComponent(
-            currentLocality.pincode
-          )}`
-        );
-        const data = await res.json();
-        if (isMounted && data.articles) {
-          setNewsArticles(data.articles);
-        }
-      } catch (e) {
-        console.warn("[AdvisoriesHub] Failed to fetch news:", e);
-      } finally {
-        if (isMounted) setLoadingNews(false);
-      }
-    }
-    loadNews();
-    return () => {
-      isMounted = false;
-    };
-  }, [currentLocality.district, currentLocality.pincode, currentLocality.city]);
+    setNewsArticles([]);
+    setLoadingNews(false);
+  }, []);
 
   const handleSelectQuickCity = (cityOrPin: string) => {
     const resolved = resolveIndianLocality(cityOrPin);
@@ -384,27 +362,6 @@ export function AdvisoriesHub({
             }`}
           >
             {advisories.length}
-          </span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab("news")}
-          className={`px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-2 whitespace-nowrap ${
-            activeTab === "news"
-              ? "bg-white text-slate-900 shadow-xs"
-              : "text-slate-600 hover:text-slate-900"
-          }`}
-        >
-          <Newspaper className="h-3.5 w-3.5 text-amber-600" />
-          <span>Local Press Radar</span>
-          <span
-            className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
-              activeTab === "news"
-                ? "bg-amber-50 text-amber-800 border border-amber-200/80"
-                : "bg-slate-200/80 text-slate-600"
-            }`}
-          >
-            {loadingNews ? "..." : newsArticles.length}
           </span>
         </button>
 

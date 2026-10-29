@@ -1,22 +1,33 @@
 -- Rollback Migration for Patient Profiles Architecture (Feature B)
 -- Reverts all changes made by 20260005000000_patient_profiles.sql.
+-- Wrapped in a single transactional block (BEGIN ... COMMIT).
 
--- 1. Drop document move log table
+BEGIN;
+
+-- 1. Drop storage update policy
+DROP POLICY IF EXISTS "storage: account owner update" ON storage.objects;
+DROP POLICY IF EXISTS "storage: account owner select" ON storage.objects;
+DROP POLICY IF EXISTS "storage: account owner insert" ON storage.objects;
+DROP POLICY IF EXISTS "storage: account owner delete" ON storage.objects;
+
+CREATE POLICY "storage: owner select" ON storage.objects FOR SELECT USING (bucket_id = 'medical-records' AND (storage.foldername(name))[1] = auth.uid()::text);
+CREATE POLICY "storage: owner insert" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'medical-records' AND (storage.foldername(name))[1] = auth.uid()::text);
+CREATE POLICY "storage: owner delete" ON storage.objects FOR DELETE USING (bucket_id = 'medical-records' AND (storage.foldername(name))[1] = auth.uid()::text);
+
+-- 2. Drop triggers and sync functions
+DROP TRIGGER IF EXISTS trg_cascade_document_patient_to_items ON documents;
+DROP FUNCTION IF EXISTS cascade_document_patient_to_items();
+
+DROP TRIGGER IF EXISTS trg_sync_item_patient_from_document ON items;
+DROP FUNCTION IF EXISTS sync_item_patient_from_document();
+
+DROP TRIGGER IF EXISTS trg_profile_sync_self_patient ON profiles;
+DROP FUNCTION IF EXISTS sync_self_patient_from_profile();
+
+-- 3. Drop document move log table
 DROP TABLE IF EXISTS document_move_log CASCADE;
 
--- 2. Drop patient_id columns and foreign keys from documents, items, emergency_cards
-ALTER TABLE emergency_cards DROP COLUMN IF EXISTS patient_id CASCADE;
-ALTER TABLE items DROP COLUMN IF EXISTS patient_id CASCADE;
-ALTER TABLE documents DROP COLUMN IF EXISTS patient_id CASCADE;
-
--- 3. Drop trigger and function enforcing 3-patient limit
-DROP TRIGGER IF EXISTS enforce_patient_limit ON patients;
-DROP FUNCTION IF EXISTS check_patient_limit();
-
--- 4. Drop patients table
-DROP TABLE IF EXISTS patients CASCADE;
-
--- 5. Restore original owner-based RLS policies
+-- 4. Revert table RLS policies to original single-user owner policies
 DROP POLICY IF EXISTS "documents: account patient select" ON documents;
 DROP POLICY IF EXISTS "documents: account patient insert" ON documents;
 DROP POLICY IF EXISTS "documents: account patient update" ON documents;
@@ -55,10 +66,16 @@ CREATE POLICY "emergency_cards: owner insert" ON emergency_cards FOR INSERT WITH
 CREATE POLICY "emergency_cards: owner update" ON emergency_cards FOR UPDATE USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid());
 CREATE POLICY "emergency_cards: owner delete" ON emergency_cards FOR DELETE USING (user_id = auth.uid());
 
-DROP POLICY IF EXISTS "storage: account owner select" ON storage.objects;
-DROP POLICY IF EXISTS "storage: account owner insert" ON storage.objects;
-DROP POLICY IF EXISTS "storage: account owner delete" ON storage.objects;
+-- 5. Drop patient_id columns from emergency_cards, items, documents
+ALTER TABLE emergency_cards DROP COLUMN IF EXISTS patient_id CASCADE;
+ALTER TABLE items DROP COLUMN IF EXISTS patient_id CASCADE;
+ALTER TABLE documents DROP COLUMN IF EXISTS patient_id CASCADE;
 
-CREATE POLICY "storage: owner select" ON storage.objects FOR SELECT USING (bucket_id = 'medical-records' AND (storage.foldername(name))[1] = auth.uid()::text);
-CREATE POLICY "storage: owner insert" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'medical-records' AND (storage.foldername(name))[1] = auth.uid()::text);
-CREATE POLICY "storage: owner delete" ON storage.objects FOR DELETE USING (bucket_id = 'medical-records' AND (storage.foldername(name))[1] = auth.uid()::text);
+-- 6. Drop trigger and function enforcing 3-patient limit
+DROP TRIGGER IF EXISTS enforce_patient_limit ON patients;
+DROP FUNCTION IF EXISTS check_patient_limit();
+
+-- 7. Drop patients table
+DROP TABLE IF EXISTS patients CASCADE;
+
+COMMIT;
