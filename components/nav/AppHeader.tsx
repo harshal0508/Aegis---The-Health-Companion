@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
   ShieldAlert,
-  Activity,
   Home,
   FileText,
   FolderOpen,
@@ -29,18 +29,15 @@ export function AppHeader() {
     <header className="sticky top-0 z-40 w-full bg-white/90 backdrop-blur-md border-b border-slate-200/80 shadow-2xs select-none">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 flex items-center justify-between h-16">
         {/* Brand Logo */}
-        <Link href="/home" className="flex items-center gap-2.5 group">
-          <div className="h-9 w-9 rounded-xl bg-gradient-to-tr from-teal-600 to-teal-500 text-white flex items-center justify-center shadow-xs group-hover:scale-105 transition-transform">
-            <Activity className="h-5 w-5" />
-          </div>
-          <div>
-            <span className="font-extrabold text-base tracking-tight text-slate-900 leading-none block">
-              Aegis
-            </span>
-            <p className="text-[10px] text-slate-400 font-medium leading-none mt-1">
-              Patient-Owned Health Platform
-            </p>
-          </div>
+        <Link href="/home" className="flex items-center group py-1" aria-label="Aegis Home">
+          <Image
+            src="/images/aegis-logo.png"
+            alt="Aegis - Patient-Owned Health Platform"
+            width={128}
+            height={44}
+            className="h-10 sm:h-11 w-auto object-contain transition-transform group-hover:scale-[1.02]"
+            priority
+          />
         </Link>
 
         {/* Desktop Navigation Links */}
