@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import {
   Users,
   User,
@@ -56,6 +57,11 @@ export function ProfileSwitcher() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [profileToDelete, setProfileToDelete] = useState<PatientProfile | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Add Profile Form State
   const [fullName, setFullName] = useState("");
@@ -270,9 +276,9 @@ export function ProfileSwitcher() {
         </>
       )}
 
-      {/* Add Family Member Modal */}
-      {showAddModal && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/50 backdrop-blur-xs">
+      {/* Add Family Member Modal (Portal to body so it escapes header stacking context) */}
+      {mounted && showAddModal && createPortal(
+        <div className="fixed inset-0 z-[100] overflow-y-auto bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
           <div className="flex min-h-full items-center justify-center p-4 sm:p-6">
             <div
               className="fixed inset-0"
@@ -443,12 +449,13 @@ export function ProfileSwitcher() {
               </form>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* Delete Confirmation Modal */}
-      {showDeleteModal && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/50 backdrop-blur-xs">
+      {/* Delete Confirmation Modal (Portal to body) */}
+      {mounted && showDeleteModal && createPortal(
+        <div className="fixed inset-0 z-[100] overflow-y-auto bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
           <div className="flex min-h-full items-center justify-center p-4 sm:p-6">
             <div
               className="fixed inset-0"
@@ -496,7 +503,8 @@ export function ProfileSwitcher() {
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
