@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import imageCompression from "browser-image-compression";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -54,8 +55,29 @@ export function DocumentUploadForm() {
   const [uploading, setUploading] = useState<boolean>(false);
   const [uploadProgress, setUploadProgress] = useState<string>("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [attestedIdentity, setAttestedIdentity] = useState<boolean>(false);
+  const [patientName, setPatientName] = useState<string>("you");
 
   const supabase = createClient();
+
+  useEffect(() => {
+    async function loadProfile() {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("full_name")
+          .eq("id", user.id)
+          .single();
+        if (profile?.full_name) {
+          setPatientName(profile.full_name);
+        }
+      }
+    }
+    loadProfile();
+  }, []);
 
   const handleFilesSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = Array.from(e.target.files || []);
@@ -371,10 +393,31 @@ export function DocumentUploadForm() {
         </div>
       )}
 
+      {/* Patient Identity Ownership Attestation (Part A.5) */}
+      <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3.5 flex items-start gap-3">
+        <Checkbox
+          id="identity-attestation"
+          checked={attestedIdentity}
+          onCheckedChange={(checked) => setAttestedIdentity(!!checked)}
+          className="mt-0.5 data-[state=checked]:bg-teal-600 data-[state=checked]:border-teal-600"
+        />
+        <div className="space-y-0.5">
+          <Label
+            htmlFor="identity-attestation"
+            className="text-xs font-semibold text-slate-900 cursor-pointer block"
+          >
+            This report belongs to {patientName}
+          </Label>
+          <p className="text-[11px] text-slate-500 leading-relaxed">
+            Medical records must match the selected patient profile. Reports with conflicting patient names are quarantined and blocked from Emergency Medical ID generation.
+          </p>
+        </div>
+      </div>
+
       {/* Submit button */}
       <Button
         type="submit"
-        disabled={pages.length === 0 || uploading || compressing}
+        disabled={pages.length === 0 || uploading || compressing || !attestedIdentity}
         className="w-full bg-teal-600 hover:bg-teal-700 text-white font-medium h-11"
       >
         {uploading ? (

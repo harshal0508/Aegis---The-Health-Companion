@@ -22,6 +22,9 @@ interface ExtractionPayload {
   doc_date: string | null;
   doc_date_type?: "discharge" | "signed" | "admission" | "report" | "unspecified" | null;
   doc_date_raw?: string | null;
+  patient_name_as_printed?: string | null;
+  patient_name_latin?: string | null;
+  patient_dob?: string | null;
   items: Array<{
     category: "allergy" | "medication" | "condition" | "surgery" | "lab" | "implant";
     value: string;
@@ -112,6 +115,12 @@ Analyze any dates printed on the document:
 4. Set "doc_date_type": "discharge" | "signed" | "admission" | "report" | "unspecified" | null.
 5. Set "doc_date_raw": the exact verbatim date string as printed on the document (e.g. "05/22/2026 00:00 PST").
 
+TASK 4: PATIENT IDENTITY EXTRACTION
+Inspect the document header, patient demographics banner, or bill details:
+1. "patient_name_as_printed": The exact patient name as printed on the document (in any script, e.g., Devanagari or Latin, including titles if printed, e.g., "Mr. Harshal Jain", "हर्षल जैन", "Baby of Sunita"). If no patient name is printed or visible, return null.
+2. "patient_name_latin": The patient name transliterated to standard Latin alphabet (e.g., "Harshal Jain", "Sunita Sharma"). Return null if no name is found.
+3. "patient_dob": The patient's Date of Birth (NOT document date), in YYYY-MM-DD format if explicitly printed on the document (e.g. "DOB: 10/05/1995" -> "1995-05-10"). Return null if no patient DOB is printed.
+
 CRITICAL RULES:
 1. For every item, provide "quote": the EXACT verbatim snippet as it appears in the document. The quote MUST be present word-for-word in the "ocr_text".
 2. Set "confidence": between 0.0 and 1.0 based on visual clarity and certainty.
@@ -131,6 +140,9 @@ CRITICAL RULES:
           nullable: true,
         },
         doc_date_raw: { type: "STRING", nullable: true },
+        patient_name_as_printed: { type: "STRING", nullable: true },
+        patient_name_latin: { type: "STRING", nullable: true },
+        patient_dob: { type: "STRING", nullable: true },
         items: {
           type: "ARRAY",
           items: {
@@ -315,6 +327,9 @@ CRITICAL RULES:
       doc_date: parsedResult.doc_date || null,
       doc_date_type: parsedResult.doc_date_type || null,
       doc_date_raw: parsedResult.doc_date_raw || null,
+      patient_name_as_printed: parsedResult.patient_name_as_printed || null,
+      patient_name_latin: parsedResult.patient_name_latin || null,
+      patient_dob: parsedResult.patient_dob || null,
       items,
       model_version: json.modelVersion || this.model,
     };

@@ -5,6 +5,7 @@ import { verifyQuotesAgainstOcr, deduplicateExtractedItems } from "@/lib/extract
 import { ocrPage, type TesseractResult } from "@/lib/ocr/tesseract";
 import { crossCheckItem } from "@/lib/extraction/crosscheck";
 import { locateQuoteBoundingBoxes } from "@/lib/extraction/locator";
+import { matchPatientIdentity } from "@/lib/extraction/identity-matcher";
 
 // Daily extraction page cap per user (configurable via DAILY_PAGE_CAP).
 // In development, default to generous cap (500 pages) so testing is never blocked.
@@ -48,6 +49,13 @@ export async function POST(
         { status: 404 }
       );
     }
+
+    // 2.1 Fetch patient profile for identity matching
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("full_name, dob")
+      .eq("id", user.id)
+      .single();
 
     // 3. Fetch Pages of the document
     const { data: pages, error: pagesErr } = await supabase
@@ -102,6 +110,9 @@ export async function POST(
 
     let detectedDocDate: string | null = null;
     let detectedDocDateType: string | null = null;
+    let detectedPatientNamePrinted: string | null = null;
+    let detectedPatientNameLatin: string | null = null;
+    let detectedPatientDob: string | null = null;
     let totalItemsCreated = 0;
     let verifiedItemsCount = 0;
     let primaryError: string | null = null;
@@ -223,6 +234,27 @@ export async function POST(
           detectedDocDateType = extractionResult.doc_date_type || "unspecified";
         }
 
+        // Feature A: Extract patient identity metadata
+        if (!detectedPatientNamePrinted && extractionResult.patient_name_as_printed) {
+          detectedPatientNamePrinted = extractionResult.patient_name_as_printed;
+        }
+        if (!detectedPatientNameLatin && extractionResult.patient_name_latin) {
+          detectedPatientNameLatin = extractionResult.patient_name_latin;
+        }
+        if (!detectedPatientDob && extractionResult.patient_dob) {
+          detectedPatientDob = extractionResult.patient_dob;
+        }
+
+        // Run Identity Matcher against active patient profile
+        const identityResult = matchPatientIdentity(
+          { full_name: profile?.full_name || "", dob: profile?.dob },
+          {
+            patient_name_as_printed: detectedPatientNamePrinted,
+            patient_name_latin: detectedPatientNameLatin,
+            patient_dob: detectedPatientDob,
+          }
+        );
+
         // Rule 1: Quote Verification Gate (verifies quote appears in primary transcript)
         const verification = verifyQuotesAgainstOcr(
           extractionResult.items,
@@ -270,6 +302,13 @@ export async function POST(
               itemStatus = "needs_review";
               reviewReason = check.reviewReason || "OCR disagreement";
             }
+          }
+
+          // Rule A.3: Identity Mismatch Lock
+          // If mismatch: ALL items from that document become needs_review
+          if (identityResult.outcome === "mismatch") {
+            itemStatus = "needs_review";
+            reviewReason = "Report appears to be for someone else";
           }
 
           return {
@@ -335,25 +374,56 @@ export async function POST(
     }
   }
 
-    // 8. Update Document: mark ready, set doc_date if detected and not already set
+    // 8. Update Document: mark ready, set doc_date if detected, and record identity verification
+    const finalIdentityResult = matchPatientIdentity(
+      { full_name: profile?.full_name || "", dob: profile?.dob },
+      {
+        patient_name_as_printed: detectedPatientNamePrinted,
+        patient_name_latin: detectedPatientNameLatin,
+        patient_dob: detectedPatientDob,
+      }
+    );
+
     const updateDocData: Record<string, any> = {
       status: "ready",
+      identity_status: finalIdentityResult.outcome,
+      identity_details: finalIdentityResult,
+      patient_name_as_printed: detectedPatientNamePrinted,
+      patient_name_latin: detectedPatientNameLatin,
+      patient_dob: detectedPatientDob,
     };
 
     if (detectedDocDate && !document.doc_date) {
       updateDocData.doc_date = detectedDocDate;
     }
+    if (detectedDocDateType) {
+      updateDocData.doc_date_type = detectedDocDateType;
+    }
+
+    if (finalIdentityResult.outcome === "mismatch") {
+      // Rule A.3: Mismatch -> ALL items from that document become needs_review
+      await supabase
+        .from("items")
+        .update({
+          status: "needs_review",
+          review_reason: "Report appears to be for someone else",
+        })
+        .eq("user_id", user.id)
+        .in("page_id", pageIds);
+    }
 
     try {
-      if (detectedDocDateType) {
-        updateDocData.doc_date_type = detectedDocDateType;
-      }
       await supabase
         .from("documents")
         .update(updateDocData)
         .eq("id", documentId);
     } catch {
-      // Fallback if doc_date_type column is not yet migrated in DB
+      // Fallback if identity / doc_date_type columns are not yet applied in DB
+      delete updateDocData.identity_status;
+      delete updateDocData.identity_details;
+      delete updateDocData.patient_name_as_printed;
+      delete updateDocData.patient_name_latin;
+      delete updateDocData.patient_dob;
       delete updateDocData.doc_date_type;
       await supabase
         .from("documents")

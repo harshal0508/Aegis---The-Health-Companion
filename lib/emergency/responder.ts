@@ -94,6 +94,7 @@ export async function getEmergencyResponderData(
   // 7. Resolve document metadata for date & age provenance (without exposing document IDs or storage paths)
   const pageIds = Array.from(new Set((confirmedRows || []).map((r: any) => r.page_id).filter(Boolean)));
   const pageMetaMap = new Map<string, PageDocMeta>();
+  const pageToDocMap = new Map<string, any>();
 
   if (pageIds.length > 0) {
     const { data: pageRows } = await supabase
@@ -105,13 +106,14 @@ export async function getEmergencyResponderData(
     if (docIds.length > 0) {
       const { data: docRows } = await supabase
         .from("documents")
-        .select("id, doc_type, doc_date, doc_date_type")
+        .select("id, doc_type, doc_date, doc_date_type, identity_status, attestation_timestamp, attestation_type")
         .in("id", docIds);
 
       const docMap = new Map((docRows || []).map((d: any) => [d.id, d]));
       (pageRows || []).forEach((p: any) => {
         const d: any = docMap.get(p.document_id);
         if (d) {
+          pageToDocMap.set(p.id, d);
           pageMetaMap.set(p.id, {
             doc_type: d.doc_type || "Medical Document",
             doc_date: d.doc_date,
@@ -122,9 +124,24 @@ export async function getEmergencyResponderData(
     }
   }
 
-  // 8. Apply Sanitizer: Enforces confirmed-only, visible categories, and strips internal IDs/URLs
+  // 8. Re-check Identity Gate (Rule 4):
+  // Items from documents with an unresolved mismatch or unattested name_not_found NEVER appear
+  const validConfirmedRows = ((confirmedRows as RawDbItem[]) || []).filter((item: any) => {
+    if (!item.page_id) return true; // Patient-entered items without page_id are verified by patient directly
+    const doc = pageToDocMap.get(item.page_id);
+    if (!doc) return true;
+    if (doc.identity_status === "mismatch" && doc.attestation_type !== "same_person_override") {
+      return false;
+    }
+    if (doc.identity_status === "name_not_found" && !doc.attestation_timestamp) {
+      return false;
+    }
+    return true;
+  });
+
+  // 9. Apply Sanitizer: Enforces confirmed-only, visible categories, and strips internal IDs/URLs
   const sanitized = sanitizeResponderData({
-    rawItems: (confirmedRows as RawDbItem[]) || [],
+    rawItems: validConfirmedRows,
     visibleCategories: visibleCats,
     pageMetaMap,
     profile,

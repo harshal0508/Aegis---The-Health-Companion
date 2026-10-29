@@ -29,12 +29,57 @@ export async function GET() {
       .eq("id", user.id)
       .single();
 
-    // 3. Fetch count of CONFIRMED items per category (Rule: only confirmed items can appear)
-    const { data: confirmedItems } = await supabase
+    // 3. Fetch count of CONFIRMED items per category (Rule 4: items from documents with unresolved mismatch or no attestation never appear)
+    const { data: rawConfirmedItems } = await supabase
       .from("items")
-      .select("id, category, value")
+      .select("id, category, value, page_id")
       .eq("user_id", user.id)
       .eq("status", "confirmed");
+
+    const pageIds = Array.from(
+      new Set((rawConfirmedItems || []).map((i) => i.page_id).filter(Boolean))
+    );
+    const invalidPageIds = new Set<string>();
+
+    if (pageIds.length > 0) {
+      const { data: pageRows } = await supabase
+        .from("pages")
+        .select("id, document_id")
+        .in("id", pageIds);
+
+      const docIds = Array.from(new Set((pageRows || []).map((p) => p.document_id)));
+      if (docIds.length > 0) {
+        const { data: docRows } = await supabase
+          .from("documents")
+          .select("id, identity_status, attestation_timestamp, attestation_type")
+          .in("id", docIds);
+
+        const invalidDocIds = new Set(
+          (docRows || [])
+            .filter((d) => {
+              if (
+                d.identity_status === "mismatch" &&
+                d.attestation_type !== "same_person_override"
+              )
+                return true;
+              if (d.identity_status === "name_not_found" && !d.attestation_timestamp)
+                return true;
+              return false;
+            })
+            .map((d) => d.id)
+        );
+
+        (pageRows || []).forEach((p) => {
+          if (invalidDocIds.has(p.document_id)) {
+            invalidPageIds.add(p.id);
+          }
+        });
+      }
+    }
+
+    const confirmedItems = (rawConfirmedItems || []).filter(
+      (item) => !item.page_id || !invalidPageIds.has(item.page_id)
+    );
 
     const confirmedCounts: Record<string, number> = {
       allergy: 0,

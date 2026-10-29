@@ -33,7 +33,16 @@ export async function GET() {
     let pagesMap = new Map<string, { page_no: number; document_id: string }>();
     let docsMap = new Map<
       string,
-      { id: string; doc_type: string; doc_date: string | null; doc_date_type?: string | null; storage_path: string }
+      {
+        id: string;
+        doc_type: string;
+        doc_date: string | null;
+        doc_date_type?: string | null;
+        storage_path: string;
+        identity_status?: string | null;
+        attestation_timestamp?: string | null;
+        attestation_type?: string | null;
+      }
     >();
 
     if (pageIds.length > 0) {
@@ -50,7 +59,9 @@ export async function GET() {
       if (docIds.length > 0) {
         const { data: docs } = await supabase
           .from("documents")
-          .select("id, doc_type, doc_date, doc_date_type, storage_path")
+          .select(
+            "id, doc_type, doc_date, doc_date_type, storage_path, identity_status, attestation_timestamp, attestation_type"
+          )
           .in("id", docIds);
 
         (docs || []).forEach((d) => {

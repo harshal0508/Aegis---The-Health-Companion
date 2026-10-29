@@ -31,6 +31,9 @@ interface ItemDocument {
   doc_date: string | null;
   doc_date_type?: string | null;
   storage_path: string;
+  identity_status?: string | null;
+  attestation_timestamp?: string | null;
+  attestation_type?: string | null;
 }
 
 interface ItemSource {
@@ -114,9 +117,36 @@ export function HealthSummaryView() {
 
   // Interaction states
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [attestingDocId, setAttestingDocId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [editingItem, setEditingItem] = useState<{ id: string; value: string } | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
+
+  const handleAttest = async (docId: string, action: "attest_name_not_found" | "same_person") => {
+    let note: string | undefined;
+    if (action === "same_person") {
+      const input = prompt(
+        "Confirm this report is for this patient (e.g. maiden name, minor hospital typo, or family member variant):"
+      );
+      if (input === null) return;
+      note = input.trim();
+    }
+    setAttestingDocId(docId);
+    try {
+      const res = await fetch(`/api/documents/${docId}/attest`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, note }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Attestation failed");
+      await fetchItems();
+    } catch (err: any) {
+      alert(`Attestation failed: ${err.message}`);
+    } finally {
+      setAttestingDocId(null);
+    }
+  };
 
   // Manual Add Modal State
   const [isAdding, setIsAdding] = useState(false);
@@ -620,41 +650,118 @@ export function HealthSummaryView() {
                             </div>
 
                             {/* Confirm Action Bar adjacent to Quote & Document Link */}
-                            {item.status !== "confirmed" && !isEditing && (
-                              <div className="mt-3 space-y-2">
-                                {item.review_reason && (
-                                  <div className="bg-rose-50 border border-rose-200 rounded-lg p-2.5 text-xs text-rose-900 space-y-1">
-                                    <div className="flex items-center gap-1.5 font-semibold text-rose-800">
-                                      <AlertTriangle className="h-3.5 w-3.5 text-rose-600 flex-shrink-0" />
-                                      <span>Second Reader Flag: {item.review_reason}</span>
-                                    </div>
-                                    <p className="text-[11px] text-rose-700 leading-normal">
-                                      Independent second reading found conflicting text on this page. Carefully inspect your document scan before confirming.
-                                    </p>
-                                  </div>
-                                )}
+                            {item.status !== "confirmed" && !isEditing && (() => {
+                              const isIdentityMismatch =
+                                item.review_reason === "Report appears to be for someone else" ||
+                                (item.document?.identity_status === "mismatch" &&
+                                  item.document?.attestation_type !== "same_person_override");
 
-                                <div className="pt-2.5 border-t border-amber-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-amber-50/40 p-2.5 rounded-lg border border-amber-200/60">
-                                  <div className="text-[11px] text-amber-900 flex items-center gap-1.5">
-                                    <Info className="h-3.5 w-3.5 text-amber-600 flex-shrink-0" />
-                                    <span>Compare quote against {item.page_no ? `Page ${item.page_no}` : "your scan"} before confirming.</span>
+                              const isNameNotFoundUnattested =
+                                item.document?.identity_status === "name_not_found" &&
+                                !item.document?.attestation_timestamp;
+
+                              const isConfirmDisabled =
+                                confirmingId === item.id ||
+                                isIdentityMismatch ||
+                                isNameNotFoundUnattested;
+
+                              return (
+                                <div className="mt-3 space-y-2">
+                                  {isIdentityMismatch ? (
+                                    <div className="bg-rose-50 border border-rose-200 rounded-lg p-3 text-xs text-rose-900 space-y-2">
+                                      <div className="flex items-center gap-1.5 font-bold text-rose-800">
+                                        <AlertTriangle className="h-4 w-4 text-rose-600 flex-shrink-0" />
+                                        <span>Patient Identity Mismatch: Report appears to be for someone else</span>
+                                      </div>
+                                      <p className="text-[11px] text-rose-700 leading-relaxed">
+                                        The patient name on this document differs from the active profile. Confirmation is locked to prevent medical record contamination. Choose an action:
+                                      </p>
+                                      <div className="flex items-center gap-2 pt-1 flex-wrap">
+                                        {item.document?.id && (
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            disabled={attestingDocId === item.document.id}
+                                            onClick={() => handleAttest(item.document!.id, "same_person")}
+                                            className="h-7 text-xs bg-white text-rose-900 border-rose-300 hover:bg-rose-100 font-semibold"
+                                          >
+                                            Confirm Same Person (e.g. Typo)
+                                          </Button>
+                                        )}
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          disabled={deletingId === item.id}
+                                          onClick={() => handleDelete(item.id)}
+                                          className="h-7 text-xs bg-white text-gray-700 border-gray-300 hover:bg-gray-100"
+                                        >
+                                          Delete Record
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  ) : isNameNotFoundUnattested ? (
+                                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-900 space-y-2">
+                                      <div className="flex items-center gap-1.5 font-bold text-amber-800">
+                                        <Info className="h-4 w-4 text-amber-600 flex-shrink-0" />
+                                        <span>Patient Name Not Detected on Report</span>
+                                      </div>
+                                      <p className="text-[11px] text-amber-800 leading-relaxed">
+                                        No patient name was found on this document. You must attest that this document belongs to this patient before confirming records.
+                                      </p>
+                                      {item.document?.id && (
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          disabled={attestingDocId === item.document.id}
+                                          onClick={() => handleAttest(item.document!.id, "attest_name_not_found")}
+                                          className="h-7 text-xs bg-white text-amber-900 border-amber-300 hover:bg-amber-100 font-semibold"
+                                        >
+                                          Attest This Document
+                                        </Button>
+                                      )}
+                                    </div>
+                                  ) : item.review_reason ? (
+                                    <div className="bg-rose-50 border border-rose-200 rounded-lg p-2.5 text-xs text-rose-900 space-y-1">
+                                      <div className="flex items-center gap-1.5 font-semibold text-rose-800">
+                                        <AlertTriangle className="h-3.5 w-3.5 text-rose-600 flex-shrink-0" />
+                                        <span>Second Reader Flag: {item.review_reason}</span>
+                                      </div>
+                                      <p className="text-[11px] text-rose-700 leading-normal">
+                                        Independent second reading found conflicting text on this page. Carefully inspect your document scan before confirming.
+                                      </p>
+                                    </div>
+                                  ) : null}
+
+                                  <div className="pt-2.5 border-t border-amber-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-amber-50/40 p-2.5 rounded-lg border border-amber-200/60">
+                                    <div className="text-[11px] text-amber-900 flex items-center gap-1.5">
+                                      <Info className="h-3.5 w-3.5 text-amber-600 flex-shrink-0" />
+                                      <span>Compare quote against {item.page_no ? `Page ${item.page_no}` : "your scan"} before confirming.</span>
+                                    </div>
+                                    <Button
+                                      size="sm"
+                                      disabled={isConfirmDisabled}
+                                      onClick={() => handleConfirm(item.id)}
+                                      className={`text-white text-xs h-8 px-3 font-medium shadow-sm flex-shrink-0 ${
+                                        isConfirmDisabled
+                                          ? "bg-gray-400 cursor-not-allowed opacity-60"
+                                          : "bg-emerald-600 hover:bg-emerald-700"
+                                      }`}
+                                    >
+                                      {confirmingId === item.id ? (
+                                        <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                                      ) : (
+                                        <Check className="h-3.5 w-3.5 mr-1.5" />
+                                      )}
+                                      {isIdentityMismatch
+                                        ? "Confirm Disabled (Mismatch)"
+                                        : isNameNotFoundUnattested
+                                        ? "Attestation Required"
+                                        : "I checked this against my document"}
+                                    </Button>
                                   </div>
-                                  <Button
-                                    size="sm"
-                                    disabled={confirmingId === item.id}
-                                    onClick={() => handleConfirm(item.id)}
-                                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-8 px-3 font-medium shadow-sm flex-shrink-0"
-                                  >
-                                    {confirmingId === item.id ? (
-                                      <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
-                                    ) : (
-                                      <Check className="h-3.5 w-3.5 mr-1.5" />
-                                    )}
-                                    I checked this against my document
-                                  </Button>
                                 </div>
-                              </div>
-                            )}
+                              );
+                            })()}
                           </div>
 
                           {/* Action Buttons: Edit, Remove */}

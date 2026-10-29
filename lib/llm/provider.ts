@@ -24,6 +24,9 @@ export interface PageExtractionResult {
   doc_date?: string | null;
   doc_date_type?: "discharge" | "signed" | "admission" | "report" | "unspecified" | null;
   doc_date_raw?: string | null;
+  patient_name_as_printed?: string | null;
+  patient_name_latin?: string | null;
+  patient_dob?: string | null;
   items: ExtractedItem[];
   model_version?: string;
 }
