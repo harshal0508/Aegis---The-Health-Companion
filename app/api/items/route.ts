@@ -68,18 +68,32 @@ export async function GET(request: Request) {
         pagesMap.set(p.id, { page_no: p.page_no, document_id: p.document_id });
       });
 
-      const docIds = Array.from(new Set((pages || []).map((p) => p.document_id)));
+      const docIds = Array.from(
+        new Set((pages || []).map((p) => p.document_id).filter(Boolean))
+      ) as string[];
+
       if (docIds.length > 0) {
-        const { data: docs } = await supabase
+        // Query documents table with full resilience (select * avoids column mismatch failures)
+        const { data: docs, error: docsErr } = await supabase
           .from("documents")
-          .select(
-            "id, doc_type, doc_date, doc_date_type, storage_path, patient_id, patient_name_as_printed, patient_name_latin, patient_dob, identity_status, attestation_timestamp, attestation_type"
-          )
+          .select("*")
           .in("id", docIds);
 
-        (docs || []).forEach((d) => {
-          docsMap.set(d.id, d);
-        });
+        if (docsErr) {
+          // Fallback to core columns if select * encountered an issue
+          const { data: fallbackDocs } = await supabase
+            .from("documents")
+            .select("id, doc_type, doc_date, storage_path")
+            .in("id", docIds);
+
+          (fallbackDocs || []).forEach((d) => {
+            docsMap.set(d.id, d as any);
+          });
+        } else {
+          (docs || []).forEach((d) => {
+            docsMap.set(d.id, d);
+          });
+        }
       }
     }
 

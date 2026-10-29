@@ -63,6 +63,7 @@ export interface SummaryItem {
   status: "extracted" | "confirmed" | "needs_review";
   source: "extracted" | "patient_entered";
   sources?: ItemSource[];
+  page_id?: string | null;
   page_no?: number | null;
   document?: ItemDocument | null;
   created_at: string;
@@ -128,6 +129,55 @@ const CATEGORY_TABS = [
   { id: "surgery", label: "Procedures" },
   { id: "implant", label: "Devices" },
 ] as const;
+
+const DOC_TYPE_LABELS: Record<string, string> = {
+  prescription: "Prescription",
+  discharge_summary: "Discharge Summary",
+  lab_report: "Lab / Diagnostic Report",
+  radiology: "Scan / Radiology",
+  bill: "Medical Bill",
+  other: "Medical Document",
+};
+
+function getEventProvenance(event: {
+  document: ItemDocument | null;
+  items: SummaryItem[];
+}) {
+  const doc = event.document;
+  if (doc) {
+    const rawType = (doc.doc_type || "").toLowerCase().trim();
+    const label = DOC_TYPE_LABELS[rawType] || doc.doc_type || "Medical Document";
+    return {
+      title: label,
+      isDocument: true,
+      hasViewLink: true,
+      docId: doc.id,
+    };
+  }
+
+  // If document was not returned from lookup but items were scanned / have page numbers
+  const docItem = event.items.find(
+    (i) => i.page_no || i.page_id || i.source === "extracted"
+  );
+  if (docItem) {
+    return {
+      title: docItem.page_no
+        ? `Scanned Clinical Document (Page ${docItem.page_no})`
+        : "Scanned Clinical Document",
+      isDocument: true,
+      hasViewLink: false,
+      docId: null,
+    };
+  }
+
+  // Truly manual entry added directly by patient
+  return {
+    title: "Patient Self-Reported Entry",
+    isDocument: false,
+    hasViewLink: false,
+    docId: null,
+  };
+}
 
 export function HealthSummaryView() {
   const { patients, activePatient, activePatientId } = usePatient();
@@ -343,10 +393,16 @@ export function HealthSummaryView() {
     return item.value;
   };
 
+  // Filter items by category tab
+  const filteredItems = useMemo(() => {
+    if (selectedCategoryTab === "all") return items;
+    return items.filter((item) => item.category === selectedCategoryTab);
+  }, [items, selectedCategoryTab]);
+
   // Group items chronologically for Concept 2 (Timeline View)
   const timelineGroups = useMemo(() => {
     // Sort in reverse chronological order (newest first)
-    const sorted = [...items].sort((a, b) => {
+    const sorted = [...filteredItems].sort((a, b) => {
       const dateA = new Date(a.document?.doc_date || a.created_at).getTime();
       const dateB = new Date(b.document?.doc_date || b.created_at).getTime();
       return dateB - dateA;
@@ -373,7 +429,13 @@ export function HealthSummaryView() {
         ? d.toLocaleDateString("en-IN", { month: "long", year: "numeric" }).toUpperCase()
         : "OTHER RECORDS";
 
-      const eventKey = item.document?.id || `manual_${formatClinicalDate(rawDate)}`;
+      const eventKey =
+        item.document?.id ||
+        (item.page_id
+          ? `page_${item.page_id}`
+          : item.page_no
+          ? `scan_page_${item.page_no}_${formatClinicalDate(rawDate)}`
+          : `manual_${formatClinicalDate(rawDate)}`);
 
       if (!monthsMap.has(monthYear)) {
         monthsMap.set(monthYear, new Map());
@@ -387,6 +449,8 @@ export function HealthSummaryView() {
           document: item.document || null,
           items: [],
         });
+      } else if (!eventsMap.get(eventKey)!.document && item.document) {
+        eventsMap.get(eventKey)!.document = item.document;
       }
 
       eventsMap.get(eventKey)!.items.push(item);
@@ -396,7 +460,7 @@ export function HealthSummaryView() {
       month,
       events: Array.from(events.values()),
     }));
-  }, [items]);
+  }, [filteredItems]);
 
   if (loading) {
     return (
@@ -572,6 +636,45 @@ export function HealthSummaryView() {
         </div>
       )}
 
+      {/* 3. Category Filter Tabs (Applies directly to both Timeline & Category Views) */}
+      <div className="flex items-center gap-6 border-b border-slate-200 overflow-x-auto no-scrollbar select-none pt-1">
+        {CATEGORY_TABS.map((tab) => {
+          const isActive = selectedCategoryTab === tab.id;
+          const count =
+            tab.id === "all"
+              ? items.length
+              : items.filter((i) => i.category === tab.id).length;
+
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setSelectedCategoryTab(tab.id)}
+              className={cn(
+                "pb-3 text-sm transition-all relative flex items-center gap-2 whitespace-nowrap",
+                isActive
+                  ? "text-teal-900 font-semibold"
+                  : "text-slate-500 hover:text-slate-800 font-medium"
+              )}
+            >
+              <span>{tab.label}</span>
+              <span
+                className={cn(
+                  "text-[11px] px-1.5 py-0.5 rounded font-mono font-medium",
+                  isActive
+                    ? "bg-teal-100 text-teal-800 font-bold"
+                    : "text-slate-400 bg-slate-100"
+                )}
+              >
+                {count}
+              </span>
+              {isActive && (
+                <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-teal-600 rounded-full" />
+              )}
+            </button>
+          );
+        })}
+      </div>
+
       {/* ────────────────────────────────────────────────────────────────────────── */}
       {/* CONCEPT 2: CHRONOLOGICAL TIMELINE VIEW                                     */}
       {/* ────────────────────────────────────────────────────────────────────────── */}
@@ -579,7 +682,7 @@ export function HealthSummaryView() {
         <div className="space-y-10 pt-2">
           {timelineGroups.length === 0 ? (
             <div className="apple-card p-12 text-center text-slate-400 text-sm">
-              No medical records or document scans recorded yet.
+              No medical records recorded for this category yet.
             </div>
           ) : (
             timelineGroups.map(({ month, events }) => (
@@ -596,8 +699,7 @@ export function HealthSummaryView() {
                 {/* Vertical Timeline Spine */}
                 <div className="relative pl-6 sm:pl-8 border-l-2 border-slate-200/80 space-y-6 ml-1 sm:ml-2">
                   {events.map((event, idx) => {
-                    const doc = event.document;
-                    const eventTitle = doc?.doc_type || "Patient Self-Reported Entry";
+                    const prov = getEventProvenance(event);
 
                     return (
                       <div key={idx} className="relative">
@@ -609,17 +711,17 @@ export function HealthSummaryView() {
                           {/* Event Card Header */}
                           <div className="bg-slate-50/70 border-b border-slate-100 py-3 px-4 sm:px-5 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                             <div className="flex items-center gap-2">
-                              {doc ? (
+                              {prov.isDocument ? (
                                 <FileText className="h-4 w-4 text-teal-600" />
                               ) : (
                                 <Users className="h-4 w-4 text-teal-600" />
                               )}
                               <span className="text-xs font-bold text-slate-900">
-                                {eventTitle}
+                                {prov.title}
                               </span>
-                              {doc && (
+                              {prov.hasViewLink && prov.docId && (
                                 <Link
-                                  href={`/documents/${doc.id}`}
+                                  href={`/documents/${prov.docId}`}
                                   className="text-[11px] text-teal-700 hover:underline inline-flex items-center gap-1 font-medium ml-1"
                                 >
                                   <span>View Document</span>
@@ -771,8 +873,13 @@ export function HealthSummaryView() {
 
                                         {/* Page & Confirmation Metadata */}
                                         <div className="flex items-center gap-2 text-xs text-slate-400 pt-0.5">
-                                          {item.page_no && <span>Page {item.page_no}</span>}
-                                          {item.page_no && item.last_confirmed_at && <span>•</span>}
+                                          {item.page_no ? (
+                                            <span>Page {item.page_no}</span>
+                                          ) : item.source === "patient_entered" ? (
+                                            <span>Added manually</span>
+                                          ) : null}
+                                          {(item.page_no || item.source === "patient_entered") &&
+                                            item.last_confirmed_at && <span>•</span>}
                                           {item.last_confirmed_at && (
                                             <span className="text-emerald-700 font-medium">
                                               Confirmed {formatClinicalDate(item.last_confirmed_at)}
@@ -851,48 +958,9 @@ export function HealthSummaryView() {
         </div>
       ) : (
         /* ────────────────────────────────────────────────────────────────────────── */
-        /* CATEGORY VIEW (DESIGN A: Underline Tabs, No Pills, Clean List)              */
+        /* CATEGORY VIEW (DESIGN A: Clean List by Category)                           */
         /* ────────────────────────────────────────────────────────────────────────── */
-        <div className="space-y-5">
-          {/* Underline Tabs */}
-          <div className="flex items-center gap-6 border-b border-slate-200 overflow-x-auto no-scrollbar select-none pt-1">
-            {CATEGORY_TABS.map((tab) => {
-              const isActive = selectedCategoryTab === tab.id;
-              const count =
-                tab.id === "all"
-                  ? items.length
-                  : items.filter((i) => i.category === tab.id).length;
-
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setSelectedCategoryTab(tab.id)}
-                  className={cn(
-                    "pb-3 text-sm transition-all relative flex items-center gap-2 whitespace-nowrap",
-                    isActive
-                      ? "text-teal-900 font-semibold"
-                      : "text-slate-500 hover:text-slate-800 font-medium"
-                  )}
-                >
-                  <span>{tab.label}</span>
-                  <span
-                    className={cn(
-                      "text-[11px] px-1.5 py-0.5 rounded font-mono font-medium",
-                      isActive
-                        ? "bg-teal-100 text-teal-800 font-bold"
-                        : "text-slate-400 bg-slate-100"
-                    )}
-                  >
-                    {count}
-                  </span>
-                  {isActive && (
-                    <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-teal-600 rounded-full" />
-                  )}
-                </button>
-              );
-            })}
-          </div>
-
+        <div className="space-y-5 pt-1">
           {/* Category Sections */}
           <div className="space-y-5">
             {Object.keys(CATEGORY_CONFIG)
@@ -1048,12 +1116,20 @@ export function HealthSummaryView() {
                                           href={`/documents/${item.document.id}`}
                                           className="text-teal-700 hover:underline font-medium inline-flex items-center gap-1"
                                         >
-                                          <span>{item.document.doc_type || "Document"}</span>
+                                          <span>
+                                            {DOC_TYPE_LABELS[
+                                              (item.document.doc_type || "").toLowerCase()
+                                            ] ||
+                                              item.document.doc_type ||
+                                              "Medical Document"}
+                                          </span>
                                           {item.page_no && <span>(Page {item.page_no})</span>}
                                           <ExternalLink className="h-3 w-3" />
                                         </Link>
+                                      ) : item.page_no ? (
+                                        <span>Scanned Document (Page {item.page_no})</span>
                                       ) : (
-                                        <span>Patient Self-Reported</span>
+                                        <span>Added manually</span>
                                       )}
                                       {item.document?.doc_date && (
                                         <>
