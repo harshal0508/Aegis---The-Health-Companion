@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400;1,600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;0,6..72,500;0,6..72,600;0,6..72,700;1,6..72,300;1,6..72,400;1,6..72,500;1,6..72,600&family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400;1,600&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -42,6 +42,13 @@
     letter-spacing: -0.012em;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Editorial Serif Headings (Warm, Literary, High-Contrast Editorial Style) */
+  h1, h2, h3, .font-editorial, .font-serif {
+    font-family: 'Newsreader', 'Instrument Serif', Georgia, Cambria, 'Times New Roman', serif;
+    font-feature-settings: "opsz" 36, "calt" 1;
+    letter-spacing: -0.018em;
   }
 
   /* Accessible focus rings — teal to match accent */

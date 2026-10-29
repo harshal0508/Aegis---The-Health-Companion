@@ -285,8 +285,10 @@ export function HealthSummaryView() {
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-slate-900">Health Summary</h1>
-          <p className="text-[11px] text-slate-500 font-medium">
+          <h1 className="text-3xl sm:text-4xl font-serif font-normal tracking-tight text-slate-900">
+            Health Summary
+          </h1>
+          <p className="text-xs text-slate-500 font-normal mt-1">
             {confirmedCount} confirmed • {unconfirmedCount} pending
           </p>
         </div>

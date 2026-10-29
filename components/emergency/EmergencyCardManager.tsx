@@ -276,7 +276,9 @@ export function EmergencyCardManager() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b pb-6">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold text-gray-900">Emergency Medical Card</h1>
+            <h1 className="text-3xl sm:text-4xl font-serif font-normal text-slate-900 tracking-tight">
+              Emergency Medical Card
+            </h1>
             {card ? (
               card.active ? (
                 <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200">Active</Badge>

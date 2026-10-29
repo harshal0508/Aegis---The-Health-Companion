@@ -233,10 +233,10 @@ export function AdvisoriesHub({
       {/* 1. Page Header (Airy, Open, Clean) */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+          <h1 className="text-3xl sm:text-4xl font-serif font-normal text-slate-900 tracking-tight">
             Outbreak Radar
           </h1>
-          <p className="text-xs sm:text-sm text-slate-500 font-medium mt-1">
+          <p className="text-xs sm:text-sm text-slate-500 font-normal mt-1">
             Official IDSP epidemiological notices, real-time press alerts, and public health guidelines
           </p>
         </div>
@@ -487,10 +487,10 @@ export function AdvisoriesHub({
 
                     {/* Title */}
                     <div>
-                      <h2 className="text-base font-bold text-slate-900 leading-snug">
+                      <h2 className="text-lg font-serif font-medium text-slate-900 leading-snug">
                         {advisory.name}
                       </h2>
-                      <p className="text-xs text-slate-500 font-medium mt-0.5">
+                      <p className="text-xs text-slate-500 font-normal mt-0.5">
                         {advisory.headline}
                       </p>
                     </div>

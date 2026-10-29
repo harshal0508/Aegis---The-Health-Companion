@@ -62,13 +62,13 @@ export default async function HomePage() {
 
   return (
     <div className="space-y-6">
-      {/* Clean Greeting Header (removed vault/encryption badge) */}
+      {/* Clean Greeting Header (Editorial Serif Style) */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+          <h1 className="text-3xl sm:text-4xl font-serif font-normal text-slate-900 tracking-tight">
             Good evening, {firstName}
           </h1>
-          <p className="text-xs text-slate-500 font-medium mt-0.5">
+          <p className="text-xs sm:text-sm text-slate-500 font-normal mt-1">
             Your patient-owned health records and emergency readiness
           </p>
         </div>
@@ -185,10 +185,10 @@ export default async function HomePage() {
                 <ShieldCheck className="h-8 w-8" />
               </div>
               <div>
-                <h2 className="text-lg sm:text-xl font-extrabold tracking-tight text-white leading-tight">
+                <h2 className="text-xl sm:text-2xl font-serif font-medium tracking-tight text-white leading-tight">
                   Emergency Medical ID
                 </h2>
-                <p className="text-xs sm:text-sm text-rose-100 mt-1 font-medium max-w-xl leading-relaxed">
+                <p className="text-xs sm:text-sm text-rose-100 mt-1 font-normal max-w-xl leading-relaxed">
                   Instant scan for paramedics and ER doctors — shows your blood group, confirmed allergies, and emergency contact phone without requiring a login.
                 </p>
               </div>
@@ -214,10 +214,10 @@ export default async function HomePage() {
             <Plus className="h-5 w-5" />
           </div>
           <div className="mt-4">
-            <span className="text-xs sm:text-sm font-bold text-slate-900 block group-hover:text-teal-700 transition-colors">
+            <span className="text-sm sm:text-base font-serif font-medium text-slate-900 block group-hover:text-teal-700 transition-colors">
               Scan Document
             </span>
-            <span className="text-[11px] text-slate-500 font-medium mt-0.5 block">
+            <span className="text-[11px] text-slate-500 font-normal mt-0.5 block">
               Upload Prescriptions &amp; Reports
             </span>
           </div>
@@ -231,10 +231,10 @@ export default async function HomePage() {
             <FileText className="h-5 w-5" />
           </div>
           <div className="mt-4">
-            <span className="text-xs sm:text-sm font-bold text-slate-900 block group-hover:text-blue-700 transition-colors">
+            <span className="text-sm sm:text-base font-serif font-medium text-slate-900 block group-hover:text-blue-700 transition-colors">
               Health Summary
             </span>
-            <span className="text-[11px] text-slate-500 font-medium mt-0.5 block">
+            <span className="text-[11px] text-slate-500 font-normal mt-0.5 block">
               Chronological Records
             </span>
           </div>
@@ -248,10 +248,10 @@ export default async function HomePage() {
             <Bell className="h-5 w-5" />
           </div>
           <div className="mt-4">
-            <span className="text-xs sm:text-sm font-bold text-slate-900 block group-hover:text-amber-700 transition-colors">
+            <span className="text-sm sm:text-base font-serif font-medium text-slate-900 block group-hover:text-amber-700 transition-colors">
               Outbreak Watch
             </span>
-            <span className="text-[11px] text-slate-500 font-medium mt-0.5 block">
+            <span className="text-[11px] text-slate-500 font-normal mt-0.5 block">
               MoHFW &amp; Press Alerts
             </span>
           </div>
@@ -265,10 +265,10 @@ export default async function HomePage() {
             <FolderOpen className="h-5 w-5" />
           </div>
           <div className="mt-4">
-            <span className="text-xs sm:text-sm font-bold text-slate-900 block group-hover:text-purple-700 transition-colors">
+            <span className="text-sm sm:text-base font-serif font-medium text-slate-900 block group-hover:text-purple-700 transition-colors">
               Medical Records
             </span>
-            <span className="text-[11px] text-slate-500 font-medium mt-0.5 block">
+            <span className="text-[11px] text-slate-500 font-normal mt-0.5 block">
               Original Scans &amp; Reports
             </span>
           </div>
@@ -283,10 +283,10 @@ export default async function HomePage() {
               <FileText className="h-4 w-4" />
             </div>
             <div>
-              <h2 className="text-xs sm:text-sm font-bold text-slate-900 uppercase tracking-wider">
+              <h2 className="text-sm sm:text-base font-serif font-medium text-slate-900">
                 Recent Clinical Scans
               </h2>
-              <p className="text-[11px] text-slate-400 font-medium">
+              <p className="text-[11px] text-slate-400 font-normal">
                 Digitized hospital documents and verified quotes
               </p>
             </div>

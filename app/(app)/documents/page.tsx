@@ -42,10 +42,10 @@ export default async function DocumentsPage() {
     <div className="space-y-4 pt-1">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-slate-900">
+          <h1 className="text-3xl sm:text-4xl font-serif font-normal tracking-tight text-slate-900">
             Medical Records
           </h1>
-          <p className="text-[11px] text-slate-500 font-medium">
+          <p className="text-xs text-slate-500 font-normal mt-1">
             Scans, discharge summaries, and prescriptions
           </p>
         </div>

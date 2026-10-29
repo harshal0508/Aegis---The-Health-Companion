@@ -63,7 +63,8 @@ module.exports = {
       },
       fontFamily: {
         sans: ["'Plus Jakarta Sans'", "system-ui", "-apple-system", "BlinkMacSystemFont", "Segoe UI", "Roboto", "sans-serif"],
-        serif: ["'Newsreader'", "Georgia", "serif"],
+        serif: ["'Newsreader'", "'Instrument Serif'", "Georgia", "Cambria", "'Times New Roman'", "serif"],
+        editorial: ["'Newsreader'", "'Instrument Serif'", "Georgia", "serif"],
         mono: ["ui-monospace", "SFMono-Regular", "Menlo", "Monaco", "Consolas", "monospace"],
       },
       keyframes: {
