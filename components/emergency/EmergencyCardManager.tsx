@@ -490,14 +490,14 @@ export function EmergencyCardManager() {
                     Secure Emergency Link Created (Shown Once)
                   </CardTitle>
                 </div>
-                <CardDescription className="text-xs text-amber-900 leading-relaxed space-y-1">
+                <div className="text-xs text-amber-900 leading-relaxed space-y-1 mt-1">
                   <p>
                     <strong>Save or Download Now:</strong> For security, only a cryptographic SHA-256 hash of your token is stored in our database. Once you leave this page, the raw link and QR code cannot be retrieved or shown again.
                   </p>
                   <p className="text-[11px] text-amber-800">
                     If you lose this link, re-showing the QR code requires <strong>regenerating</strong> the card, which immediately and permanently invalidates this link.
                   </p>
-                </CardDescription>
+                </div>
               </CardHeader>
 
               <CardContent className="space-y-4 pt-2">
