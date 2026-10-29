@@ -272,224 +272,228 @@ export function ProfileSwitcher() {
 
       {/* Add Family Member Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in">
-          <div
-            className="fixed inset-0"
-            onClick={() => !submitting && setShowAddModal(false)}
-            aria-hidden="true"
-          />
-          <div className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl border border-slate-200 z-10 space-y-4">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-              <div>
-                <h2 className="text-lg font-serif font-bold text-slate-900">
-                  Add Family Member Profile
-                </h2>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Create a dedicated medical profile for your dependent. Each profile keeps separate records, extractions, and emergency cards.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowAddModal(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateProfile} className="space-y-3.5 pt-1">
-              {addError && (
-                <div className="p-2.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2">
-                  <AlertTriangle className="h-4 w-4 shrink-0" />
-                  <span>{addError}</span>
-                </div>
-              )}
-
-              <div>
-                <Label htmlFor="fullName" className="text-xs font-semibold text-slate-700">
-                  Full Legal Name <span className="text-rose-500">*</span>
-                </Label>
-                <Input
-                  id="fullName"
-                  placeholder="e.g. Ramesh Chandra Sharma"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  className="mt-1 text-xs h-9"
-                  required
-                />
-                <p className="text-[10px] text-slate-400 mt-1">
-                  Must match the printed name on lab reports and prescriptions.
-                </p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/50 backdrop-blur-xs">
+          <div className="flex min-h-full items-center justify-center p-4 sm:p-6">
+            <div
+              className="fixed inset-0"
+              onClick={() => !submitting && setShowAddModal(false)}
+              aria-hidden="true"
+            />
+            <div className="relative w-full max-w-md my-auto max-h-[90vh] flex flex-col rounded-2xl bg-white shadow-2xl border border-slate-200 z-10 overflow-hidden">
+              <div className="flex items-center justify-between p-4 sm:p-5 pb-3 border-b border-slate-100 shrink-0">
                 <div>
-                  <Label htmlFor="dob" className="text-xs font-semibold text-slate-700">
-                    Date of Birth <span className="text-rose-500">*</span>
+                  <h2 className="text-base font-serif font-bold text-slate-900">
+                    Add Family Member Profile
+                  </h2>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Create a dedicated medical profile with separate records and emergency card.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(false)}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <form onSubmit={handleCreateProfile} className="p-4 sm:p-5 overflow-y-auto space-y-3.5">
+                {addError && (
+                  <div className="p-2.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4 shrink-0" />
+                    <span>{addError}</span>
+                  </div>
+                )}
+
+                <div>
+                  <Label htmlFor="fullName" className="text-xs font-semibold text-slate-700">
+                    Full Legal Name <span className="text-rose-500">*</span>
                   </Label>
                   <Input
-                    id="dob"
-                    type="date"
-                    value={dob}
-                    onChange={(e) => setDob(e.target.value)}
+                    id="fullName"
+                    placeholder="e.g. Ramesh Chandra Sharma"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
                     className="mt-1 text-xs h-9"
                     required
                   />
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    Must match the printed name on lab reports and prescriptions.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label htmlFor="dob" className="text-xs font-semibold text-slate-700">
+                      Date of Birth <span className="text-rose-500">*</span>
+                    </Label>
+                    <Input
+                      id="dob"
+                      type="date"
+                      value={dob}
+                      onChange={(e) => setDob(e.target.value)}
+                      className="mt-1 text-xs h-9"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="relationship" className="text-xs font-semibold text-slate-700">
+                      Relationship <span className="text-rose-500">*</span>
+                    </Label>
+                    <select
+                      id="relationship"
+                      value={relationship}
+                      onChange={(e) => setRelationship(e.target.value)}
+                      className="mt-1 w-full h-9 rounded-md border border-input bg-transparent px-3 py-1 text-xs shadow-2xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    >
+                      {RELATIONSHIPS.map((rel) => (
+                        <option key={rel} value={rel}>
+                          {rel}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label htmlFor="bloodGroup" className="text-xs font-semibold text-slate-700">
+                      Blood Group
+                    </Label>
+                    <select
+                      id="bloodGroup"
+                      value={bloodGroup}
+                      onChange={(e) => setBloodGroup(e.target.value)}
+                      className="mt-1 w-full h-9 rounded-md border border-input bg-transparent px-3 py-1 text-xs shadow-2xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    >
+                      <option value="">Select (optional)</option>
+                      {BLOOD_GROUPS.map((bg) => (
+                        <option key={bg} value={bg}>
+                          {bg}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="contactPhone" className="text-xs font-semibold text-slate-700">
+                      Emergency Phone
+                    </Label>
+                    <Input
+                      id="contactPhone"
+                      type="tel"
+                      placeholder="+91 98765 43210"
+                      value={contactPhone}
+                      onChange={(e) => setContactPhone(e.target.value)}
+                      className="mt-1 text-xs h-9"
+                    />
+                  </div>
                 </div>
 
                 <div>
-                  <Label htmlFor="relationship" className="text-xs font-semibold text-slate-700">
-                    Relationship <span className="text-rose-500">*</span>
-                  </Label>
-                  <select
-                    id="relationship"
-                    value={relationship}
-                    onChange={(e) => setRelationship(e.target.value)}
-                    className="mt-1 w-full h-9 rounded-md border border-input bg-transparent px-3 py-1 text-xs shadow-2xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                  >
-                    {RELATIONSHIPS.map((rel) => (
-                      <option key={rel} value={rel}>
-                        {rel}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label htmlFor="bloodGroup" className="text-xs font-semibold text-slate-700">
-                    Blood Group
-                  </Label>
-                  <select
-                    id="bloodGroup"
-                    value={bloodGroup}
-                    onChange={(e) => setBloodGroup(e.target.value)}
-                    className="mt-1 w-full h-9 rounded-md border border-input bg-transparent px-3 py-1 text-xs shadow-2xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                  >
-                    <option value="">Select (optional)</option>
-                    {BLOOD_GROUPS.map((bg) => (
-                      <option key={bg} value={bg}>
-                        {bg}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <Label htmlFor="contactPhone" className="text-xs font-semibold text-slate-700">
-                    Emergency Phone
+                  <Label htmlFor="contactName" className="text-xs font-semibold text-slate-700">
+                    Emergency Contact Name
                   </Label>
                   <Input
-                    id="contactPhone"
-                    type="tel"
-                    placeholder="+91 98765 43210"
-                    value={contactPhone}
-                    onChange={(e) => setContactPhone(e.target.value)}
+                    id="contactName"
+                    placeholder="e.g. Primary Caregiver / Guardian"
+                    value={contactName}
+                    onChange={(e) => setContactName(e.target.value)}
                     className="mt-1 text-xs h-9"
                   />
                 </div>
-              </div>
 
-              <div>
-                <Label htmlFor="contactName" className="text-xs font-semibold text-slate-700">
-                  Emergency Contact Name
-                </Label>
-                <Input
-                  id="contactName"
-                  placeholder="e.g. Primary Caregiver / Guardian"
-                  value={contactName}
-                  onChange={(e) => setContactName(e.target.value)}
-                  className="mt-1 text-xs h-9"
-                />
-              </div>
+                {/* Permission Checkbox (Requirement B.6) */}
+                <div className="p-3 bg-teal-50/70 rounded-xl border border-teal-200/70 space-y-1.5">
+                  <label className="flex items-start gap-2.5 cursor-pointer">
+                    <Checkbox
+                      checked={permissionConfirmed}
+                      onCheckedChange={(c) => setPermissionConfirmed(Boolean(c))}
+                      className="mt-0.5 border-teal-600 data-[state=checked]:bg-teal-600"
+                    />
+                    <span className="text-xs text-teal-900 leading-snug">
+                      <strong>I have this person&apos;s permission</strong> to manage their health records, receive extraction alerts, and generate their emergency medical card.
+                    </span>
+                  </label>
+                </div>
 
-              {/* Permission Checkbox (Requirement B.6) */}
-              <div className="p-3 bg-teal-50/70 rounded-xl border border-teal-200/70 space-y-1.5">
-                <label className="flex items-start gap-2.5 cursor-pointer">
-                  <Checkbox
-                    checked={permissionConfirmed}
-                    onCheckedChange={(c) => setPermissionConfirmed(Boolean(c))}
-                    className="mt-0.5 border-teal-600 data-[state=checked]:bg-teal-600"
-                  />
-                  <span className="text-xs text-teal-900 leading-snug">
-                    <strong>I have this person&apos;s permission</strong> to manage their health records, receive extraction alerts, and generate their emergency medical card.
-                  </span>
-                </label>
-              </div>
-
-              <div className="pt-2 flex items-center justify-end gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowAddModal(false)}
-                  disabled={submitting}
-                  className="h-8 text-xs"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  size="sm"
-                  disabled={submitting || !fullName.trim() || !dob.trim() || !permissionConfirmed}
-                  className="bg-teal-600 hover:bg-teal-700 text-white h-8 text-xs font-semibold gap-1.5"
-                >
-                  {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                  <span>Create Profile</span>
-                </Button>
-              </div>
-            </form>
+                <div className="pt-2 flex items-center justify-end gap-2 shrink-0">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowAddModal(false)}
+                    disabled={submitting}
+                    className="h-8 text-xs"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    size="sm"
+                    disabled={submitting || !fullName.trim() || !dob.trim() || !permissionConfirmed}
+                    className="bg-teal-600 hover:bg-teal-700 text-white h-8 text-xs font-semibold gap-1.5"
+                  >
+                    {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                    <span>Create Profile</span>
+                  </Button>
+                </div>
+              </form>
+            </div>
           </div>
         </div>
       )}
 
       {/* Delete Confirmation Modal */}
       {showDeleteModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in">
-          <div
-            className="fixed inset-0"
-            onClick={() => !deleting && setShowDeleteModal(false)}
-            aria-hidden="true"
-          />
-          <div className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl border border-slate-200 z-10 space-y-4">
-            <div className="flex items-center gap-2 text-rose-700">
-              <AlertTriangle className="h-5 w-5 text-rose-600 shrink-0" />
-              <h2 className="text-lg font-serif font-bold text-slate-900">
-                Delete {profileToDelete?.full_name}&apos;s Profile?
-              </h2>
-            </div>
-            <p className="text-xs text-slate-500">
-              This action cannot be undone. All documents, uploaded files, extracted clinical items, and the emergency medical card for this profile will be permanently deleted.
-            </p>
-
-            {deleteError && (
-              <div className="p-2.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs">
-                {deleteError}
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/50 backdrop-blur-xs">
+          <div className="flex min-h-full items-center justify-center p-4 sm:p-6">
+            <div
+              className="fixed inset-0"
+              onClick={() => !deleting && setShowDeleteModal(false)}
+              aria-hidden="true"
+            />
+            <div className="relative w-full max-w-md my-auto max-h-[90vh] flex flex-col rounded-2xl bg-white p-6 shadow-2xl border border-slate-200 z-10 space-y-4 overflow-y-auto">
+              <div className="flex items-center gap-2 text-rose-700">
+                <AlertTriangle className="h-5 w-5 text-rose-600 shrink-0" />
+                <h2 className="text-lg font-serif font-bold text-slate-900">
+                  Delete {profileToDelete?.full_name}&apos;s Profile?
+                </h2>
               </div>
-            )}
+              <p className="text-xs text-slate-500">
+                This action cannot be undone. All documents, uploaded files, extracted clinical items, and the emergency medical card for this profile will be permanently deleted.
+              </p>
 
-            <div className="pt-3 flex items-center justify-end gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setShowDeleteModal(false)}
-                disabled={deleting}
-                className="h-8 text-xs"
-              >
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                onClick={handleDeleteConfirm}
-                disabled={deleting}
-                className="bg-rose-600 hover:bg-rose-700 text-white h-8 text-xs font-semibold gap-1.5"
-              >
-                {deleting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                <span>Delete Profile & Records</span>
-              </Button>
+              {deleteError && (
+                <div className="p-2.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs">
+                  {deleteError}
+                </div>
+              )}
+
+              <div className="pt-3 flex items-center justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowDeleteModal(false)}
+                  disabled={deleting}
+                  className="h-8 text-xs"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={handleDeleteConfirm}
+                  disabled={deleting}
+                  className="bg-rose-600 hover:bg-rose-700 text-white h-8 text-xs font-semibold gap-1.5"
+                >
+                  {deleting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                  <span>Delete Profile & Records</span>
+                </Button>
+              </div>
             </div>
           </div>
         </div>
