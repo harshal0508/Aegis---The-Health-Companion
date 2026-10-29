@@ -597,7 +597,7 @@ export function HealthSummaryView() {
                 <div className="relative pl-6 sm:pl-8 border-l-2 border-slate-200/80 space-y-6 ml-1 sm:ml-2">
                   {events.map((event, idx) => {
                     const doc = event.document;
-                    const eventTitle = doc?.doc_type || "Direct Clinical Entry";
+                    const eventTitle = doc?.doc_type || "Patient Self-Reported Entry";
 
                     return (
                       <div key={idx} className="relative">
@@ -609,7 +609,11 @@ export function HealthSummaryView() {
                           {/* Event Card Header */}
                           <div className="bg-slate-50/70 border-b border-slate-100 py-3 px-4 sm:px-5 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                             <div className="flex items-center gap-2">
-                              <FileText className="h-4 w-4 text-teal-600" />
+                              {doc ? (
+                                <FileText className="h-4 w-4 text-teal-600" />
+                              ) : (
+                                <Users className="h-4 w-4 text-teal-600" />
+                              )}
                               <span className="text-xs font-bold text-slate-900">
                                 {eventTitle}
                               </span>
@@ -699,9 +703,9 @@ export function HealthSummaryView() {
                                               </span>
                                             ) : null}
 
-                                            {item.source === "patient_entered" && (
+                                            {item.source === "patient_entered" && item.document && (
                                               <span className="text-[11px] text-slate-400">
-                                                {item.document ? "Edited by you" : "Added manually"}
+                                                Edited by you
                                               </span>
                                             )}
 
@@ -1049,7 +1053,7 @@ export function HealthSummaryView() {
                                           <ExternalLink className="h-3 w-3" />
                                         </Link>
                                       ) : (
-                                        <span>Direct Entry</span>
+                                        <span>Patient Self-Reported</span>
                                       )}
                                       {item.document?.doc_date && (
                                         <>
