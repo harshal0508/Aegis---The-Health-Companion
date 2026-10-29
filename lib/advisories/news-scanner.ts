@@ -16,13 +16,13 @@ export interface DistrictNewsArticle {
   district: string;
 }
 
-// Strict whitelist: Article must explicitly reference an infectious or communicable health event
+// Comprehensive whitelist: Matches any infectious disease, seasonal outbreak, surge, epidemic, or public health alert
 const COMMUNICABLE_DISEASE_REGEX =
-  /\b(dengue|malaria|chikungunya|h1n1|swine\s+flu|flu|influenza|viral\s+fever|fever\s+cases|outbreak|epidemic|cases\s+surge|infection|cholera|typhoid|jaundice|hepatitis|measles|zika|nipah|leptospirosis|conjunctivitis)\b/i;
+  /\b(outbreak|epidemic|cases\s+surge|cases\s+rise|cases\s+spike|spurt|surge|spread|spreading|infection|infections|health\s+alert|public\s+health|hospitalized|patients\s+flood|advisory|dengue|malaria|chikungunya|h1n1|swine\s+flu|flu|influenza|viral|fever|cholera|typhoid|jaundice|hepatitis|measles|chickenpox|zika|nipah|leptospirosis|scrub\s+typhus|conjunctivitis|eye\s+flu|gastroenteritis|diarrhea|diarrhoea|food\s+poisoning|pneumonia|rsv|hfmd|hand\s+foot|respiratory|strep|pertussis|rabies|tuberculosis|tb|norovirus|rotavirus|mystery\s+(illness|fever|disease))\b/i;
 
-// Strict blacklist: Eliminate hospital administrative scandals, animal sightings, police/crime reports
+// Strict blacklist: Eliminate hospital administrative scandals, animal sightings, police/crime, political or sports news
 const IRRELEVANT_CIVIC_REGEX =
-  /\b(snake|animal|leopard|dog|accident|crash|police|murder|theft|scam|corruption|brick|tender|stretcher|bribe|fire|arrest|fraud|protest|assault|dowry|bandage\s+row)\b/i;
+  /\b(snake|animal|leopard|dog|accident|crash|police|murder|theft|scam|corruption|brick|tender|stretcher|bribe|fire|arrest|fraud|protest|assault|dowry|bandage\s+row|traffic|cricket|ipl|movie|film|box\s+office|election|vote|rally|bjp|congress|aap)\b/i;
 
 /**
  * Fetch and parse real news articles for a specific district and disease query.
@@ -32,9 +32,9 @@ export async function fetchLiveDistrictHealthNews(
 ): Promise<DistrictNewsArticle[]> {
   try {
     const cleanDistrict = (district || "Indore").trim();
-    // Targeted query for communicable disease outbreaks — NO generic "hospital" keyword
+    // Dynamic, wide-spectrum query to capture ANY active disease outbreak, epidemic, or surge spreading at this time
     const query = encodeURIComponent(
-      `"${cleanDistrict}" (dengue OR malaria OR "viral fever" OR chikungunya OR H1N1 OR "swine flu" OR influenza OR "disease outbreak" OR "infection surge")`
+      `"${cleanDistrict}" (outbreak OR epidemic OR "cases surge" OR "cases rise" OR "cases spike" OR "health alert" OR "illness spreading" OR "infection surge" OR "viral fever" OR "eye flu" OR conjunctivitis OR dengue OR malaria OR chikungunya OR flu OR influenza OR H1N1 OR cholera OR typhoid OR jaundice OR hepatitis OR measles OR "scrub typhus" OR "food poisoning" OR "mystery fever" OR "infection")`
     );
     const feedUrl = `https://news.google.com/rss/search?q=${query}&hl=en-IN&gl=IN&ceid=IN:en`;
 
@@ -67,13 +67,14 @@ export function parseGoogleNewsRss(xml: string, district: string): DistrictNewsA
   const itemRegex = /<item>([\s\S]*?)<\/item>/gi;
   let match: RegExpExecArray | null;
 
-  while ((match = itemRegex.exec(xml)) !== null && articles.length < 6) {
+  while ((match = itemRegex.exec(xml)) !== null && articles.length < 8) {
     const itemXml = match[1];
 
     const titleMatch = /<title>(.*?)<\/title>/i.exec(itemXml);
     const linkMatch = /<link>(.*?)<\/link>/i.exec(itemXml);
     const pubDateMatch = /<pubDate>(.*?)<\/pubDate>/i.exec(itemXml);
     const sourceMatch = /<source[^>]*>(.*?)<\/source>/i.exec(itemXml);
+    const descMatch = /<description>([\s\S]*?)<\/description>/i.exec(itemXml);
 
     let rawTitle = titleMatch ? titleMatch[1] : "";
     rawTitle = rawTitle.replace(/<!\[CDATA\[(.*?)\]\]>/g, "$1").trim();
@@ -100,6 +101,19 @@ export function parseGoogleNewsRss(xml: string, district: string): DistrictNewsA
       }
     }
 
+    // Extract description / snippet if available from RSS
+    let snippet = `Regional press report concerning communicable disease trends in the ${district} district.`;
+    if (descMatch) {
+      const cleanDesc = descMatch[1]
+        .replace(/<!\[CDATA\[(.*?)\]\]>/g, "$1")
+        .replace(/<[^>]+>/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+      if (cleanDesc && cleanDesc.length > 15) {
+        snippet = decodeXmlEntities(cleanDesc);
+      }
+    }
+
     const url = linkMatch ? linkMatch[1].trim() : "#";
     const publishedAt = pubDateMatch
       ? new Date(pubDateMatch[1]).toISOString().split("T")[0]
@@ -112,7 +126,7 @@ export function parseGoogleNewsRss(xml: string, district: string): DistrictNewsA
         source: decodeXmlEntities(source),
         url,
         publishedAt,
-        snippet: `Regional press report concerning communicable disease trends in the ${district} district.`,
+        snippet,
         district,
       });
     }

@@ -579,7 +579,7 @@ export function AdvisoriesHub({
               <Newspaper className="h-8 w-8 text-slate-400 mx-auto" />
               <p className="font-bold text-slate-800 text-sm">No active disease cluster reports found for {currentLocality.district}</p>
               <p className="max-w-md mx-auto text-slate-500">
-                No recent media reports matched communicable disease surge keywords (dengue, malaria, H1N1, or viral fever) in this district over the past week.
+                No active disease outbreaks, epidemic surges, or health alerts reported in regional media for {currentLocality.district} over the past week.
               </p>
             </div>
           ) : (
