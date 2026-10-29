@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { formatClinicalDate } from "@/lib/utils";
+import { TreatmentCourseCard } from "@/components/medications/TreatmentCourseCard";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -88,11 +89,12 @@ export default async function HomePage() {
   // Fetch critical items counts for Emergency Readiness for active patient
   const { data: confirmedItems } = await supabase
     .from("items")
-    .select("id, category, value, patient_id")
+    .select("id, category, value, quote, created_at, status, patient_id")
     .eq("patient_id", activePatient.id)
     .eq("status", "confirmed");
 
-  const medsCount = (confirmedItems || []).filter((i) => i.category === "medication").length;
+  const medicationsList = (confirmedItems || []).filter((i) => i.category === "medication");
+  const medsCount = medicationsList.length;
   const allergiesCount = (confirmedItems || []).filter((i) => i.category === "allergy").length;
   const conditionsCount = (confirmedItems || []).filter((i) => i.category === "condition").length;
 
@@ -218,7 +220,14 @@ export default async function HomePage() {
         </div>
       </div>
 
-      {/* 2. Emergency Medical ID Card (Helpful, Patient-Focused Emergency Content) */}
+      {/* 2. Prescription Course & Follow-Up Tracker (Tier 1 Clinical Guidance) */}
+      <TreatmentCourseCard
+        medications={medicationsList}
+        patientId={activePatient.id}
+        patientName={activePatient.full_name}
+      />
+
+      {/* 3. Emergency Medical ID Card (Helpful, Patient-Focused Emergency Content) */}
       <Link href="/emergency" className="block group">
         <div className="apple-card p-5 sm:p-6 bg-gradient-to-r from-rose-500 via-rose-600 to-rose-700 text-white shadow-md relative overflow-hidden group-hover:shadow-lg transition-all">
           {/* Subtle background emergency cross watermark */}
@@ -296,7 +305,7 @@ export default async function HomePage() {
           </div>
           <div className="mt-4">
             <span className="text-sm sm:text-base font-serif font-medium text-slate-900 block group-hover:text-amber-700 transition-colors">
-              Outbreak Watch
+              Alerts
             </span>
             <span className="text-[11px] text-slate-500 font-normal mt-0.5 block">
               MoHFW &amp; Press Alerts

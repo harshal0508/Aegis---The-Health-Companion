@@ -27,6 +27,7 @@ import { Input } from "@/components/ui/input";
 import { formatClinicalDate, getDateAge } from "@/lib/utils";
 import { usePatient } from "@/components/patient/PatientContext";
 import { matchPatientIdentity } from "@/lib/extraction/identity-matcher";
+import { getMedicationPurpose } from "@/lib/medications/purpose-resolver";
 
 interface ItemDocument {
   id: string;
@@ -635,9 +636,17 @@ export function HealthSummaryView() {
                                 </Button>
                               </div>
                             ) : (
-                              <p className="text-base font-medium text-gray-900 leading-snug break-words">
-                                {displayValue}
-                              </p>
+                              <div>
+                                <p className="text-base font-medium text-gray-900 leading-snug break-words">
+                                  {displayValue}
+                                </p>
+                                {item.category === "medication" && getMedicationPurpose(item.value) && (
+                                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-blue-50/90 border border-blue-200/80 text-[11px] text-blue-800 font-medium mt-1">
+                                    <Info className="h-3 w-3 text-blue-600 shrink-0" />
+                                    <span>Used for: {getMedicationPurpose(item.value)}</span>
+                                  </div>
+                                )}
+                              </div>
                             )}
 
                             {/* Verbatim Supporting Quote */}
