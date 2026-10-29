@@ -61,10 +61,26 @@ export async function GET(
     );
 
     // 5. Generate signed read URLs for each page (valid for 15 minutes)
-    // Files are located in the private storage bucket under {user_id}/{document_id}/
-    const { data: storageFiles } = await supabase.storage
+    // Files are located in the private storage bucket under {account_id}/{patient_id}/{document_id}/ or legacy {user_id}/{document_id}/
+    const patientFolder = document.patient_id ? `${user.id}/${document.patient_id}/${documentId}` : null;
+    const legacyFolder = `${user.id}/${documentId}`;
+
+    let storageFolder = patientFolder || legacyFolder;
+    let { data: storageFiles } = await supabase.storage
       .from("medical-records")
-      .list(`${user.id}/${documentId}`);
+      .list(storageFolder);
+
+    if (!storageFiles || storageFiles.length === 0) {
+      if (patientFolder) {
+        const { data: legacyFiles } = await supabase.storage
+          .from("medical-records")
+          .list(legacyFolder);
+        if (legacyFiles && legacyFiles.length > 0) {
+          storageFolder = legacyFolder;
+          storageFiles = legacyFiles;
+        }
+      }
+    }
 
     const pagesWithUrls = await Promise.all(
       (pages || []).map(async (page) => {
@@ -72,7 +88,7 @@ export async function GET(
         const prefix = `page-${page.page_no}.`;
         const matchedFile = storageFiles?.find((f) => f.name.startsWith(prefix));
         const filename = matchedFile?.name || `page-${page.page_no}.jpg`;
-        const fullPath = `${user.id}/${documentId}/${filename}`;
+        const fullPath = `${storageFolder}/${filename}`;
 
         const { data: signedUrlData } = await supabase.storage
           .from("medical-records")
@@ -128,7 +144,7 @@ export async function DELETE(
     // 1. Verify ownership
     const { data: document, error: docError } = await supabase
       .from("documents")
-      .select("id, storage_path")
+      .select("id, patient_id, storage_path")
       .eq("id", documentId)
       .eq("user_id", user.id)
       .single();
@@ -137,13 +153,23 @@ export async function DELETE(
       return NextResponse.json({ error: "Document not found" }, { status: 404 });
     }
 
-    // 2. Remove files from storage
-    const { data: files } = await supabase.storage
-      .from("medical-records")
-      .list(`${user.id}/${documentId}`);
+    // 2. Remove files from storage (clean up both patient prefix and legacy prefix)
+    const prefixes = [
+      document.patient_id ? `${user.id}/${document.patient_id}/${documentId}` : null,
+      `${user.id}/${documentId}`,
+    ].filter(Boolean) as string[];
 
-    if (files && files.length > 0) {
-      const pathsToDelete = files.map((f) => `${user.id}/${documentId}/${f.name}`);
+    const pathsToDelete: string[] = [];
+    for (const prefix of prefixes) {
+      const { data: files } = await supabase.storage
+        .from("medical-records")
+        .list(prefix);
+      if (files && files.length > 0) {
+        files.forEach((f) => pathsToDelete.push(`${prefix}/${f.name}`));
+      }
+    }
+
+    if (pathsToDelete.length > 0) {
       await supabase.storage.from("medical-records").remove(pathsToDelete);
     }
 

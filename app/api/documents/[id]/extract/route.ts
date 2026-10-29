@@ -38,7 +38,7 @@ export async function POST(
     // 2. Fetch Document owned by user
     const { data: document, error: docErr } = await supabase
       .from("documents")
-      .select("id, user_id, storage_path, doc_date, doc_type, status")
+      .select("id, user_id, patient_id, storage_path, doc_date, doc_type, status")
       .eq("id", documentId)
       .eq("user_id", user.id)
       .single();
@@ -50,12 +50,25 @@ export async function POST(
       );
     }
 
-    // 2.1 Fetch patient profile for identity matching
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("full_name, dob")
-      .eq("id", user.id)
-      .single();
+    // 2.1 Fetch patient profile for identity matching (check patients table first, fallback to profiles)
+    let profile: any = null;
+    if (document.patient_id) {
+      const { data: patientRow } = await supabase
+        .from("patients")
+        .select("full_name, dob")
+        .eq("id", document.patient_id)
+        .maybeSingle();
+      profile = patientRow;
+    }
+
+    if (!profile) {
+      const { data: userProfile } = await supabase
+        .from("profiles")
+        .select("full_name, dob")
+        .eq("id", user.id)
+        .single();
+      profile = userProfile;
+    }
 
     // 3. Fetch Pages of the document
     const { data: pages, error: pagesErr } = await supabase
@@ -152,25 +165,29 @@ export async function POST(
     for (const page of pages) {
 
       // Download page file from Supabase private storage
+      // Supports both {account_id}/{patient_id}/{doc_id}/page-n and legacy {user_id}/{doc_id}/page-n
       const ext = document.storage_path.endsWith(".pdf") ? "pdf" : "jpg";
-      const pageStoragePath = `${user.id}/${documentId}/page-${page.page_no}.${ext}`;
+      const candidatePaths = [
+        document.storage_path && !document.storage_path.endsWith(".pdf") && !document.storage_path.endsWith(".jpg")
+          ? `${document.storage_path}/page-${page.page_no}.${ext}`
+          : null,
+        `${user.id}/${document.patient_id || user.id}/${documentId}/page-${page.page_no}.${ext}`,
+        `${user.id}/${documentId}/page-${page.page_no}.${ext}`,
+        document.storage_path,
+      ].filter(Boolean) as string[];
 
-      const { data: fileBlob, error: downloadErr } = await supabase.storage
-        .from("medical-records")
-        .download(pageStoragePath);
-
-      if (downloadErr || !fileBlob) {
-        // Fallback: Try downloading document's primary storage_path if single page
-        const { data: fallbackBlob, error: fbErr } = await supabase.storage
-          .from("medical-records")
-          .download(document.storage_path);
-
-        if (fbErr || !fallbackBlob) {
-          throw new Error(`Failed to load page image for page ${page.page_no}`);
+      let activeBlob: any = null;
+      for (const p of candidatePaths) {
+        const { data: b } = await supabase.storage.from("medical-records").download(p);
+        if (b) {
+          activeBlob = b;
+          break;
         }
       }
 
-      const activeBlob = fileBlob || (await supabase.storage.from("medical-records").download(document.storage_path)).data;
+      if (!activeBlob) {
+        throw new Error(`Failed to load page image for page ${page.page_no}`);
+      }
       if (!activeBlob) continue;
 
       const arrayBuffer = await activeBlob.arrayBuffer();
@@ -313,6 +330,7 @@ export async function POST(
 
           return {
             user_id: user.id,
+            patient_id: document.patient_id || user.id,
             page_id: page.id,
             category: item.category,
             value: item.value,

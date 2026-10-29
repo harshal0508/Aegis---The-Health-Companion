@@ -12,6 +12,7 @@ const uploadUrlSchema = z.object({
     "other",
   ]),
   doc_date: z.string().optional(),
+  patient_id: z.string().optional(),
   pages: z.array(
     z.object({
       page_no: z.number().int().min(1),
@@ -46,7 +47,37 @@ export async function POST(request: Request) {
       );
     }
 
-    const { doc_type, doc_date, pages } = parsed.data;
+    const { doc_type, doc_date, pages, patient_id } = parsed.data;
+
+    // Resolve target patient profile
+    let targetPatientId = patient_id;
+    if (targetPatientId) {
+      const { data: verifiedPatient } = await supabase
+        .from("patients")
+        .select("id")
+        .eq("id", targetPatientId)
+        .eq("account_id", user.id)
+        .maybeSingle();
+
+      if (!verifiedPatient) {
+        // Fallback check if it matches self user id
+        if (targetPatientId !== user.id) {
+          return NextResponse.json(
+            { error: "Target patient profile not found in your account." },
+            { status: 400 }
+          );
+        }
+      }
+    } else {
+      const { data: selfPatient } = await supabase
+        .from("patients")
+        .select("id")
+        .eq("account_id", user.id)
+        .eq("is_self", true)
+        .maybeSingle();
+
+      targetPatientId = selfPatient?.id || user.id;
+    }
 
     // 3. Create document record in Supabase
     // Note: status is 'uploaded' until Phase 3 extraction processes it
@@ -54,6 +85,7 @@ export async function POST(request: Request) {
       .from("documents")
       .insert({
         user_id: user.id,
+        patient_id: targetPatientId,
         storage_path: "pending", // will update with base directory path
         doc_type,
         doc_date: doc_date?.trim() ? doc_date : null,
@@ -71,7 +103,8 @@ export async function POST(request: Request) {
     }
 
     const documentId = doc.id;
-    const documentBaseStoragePath = `${user.id}/${documentId}`;
+    // Requirement B.3: Storage paths become {account_id}/{patient_id}/{document_id}/page-n
+    const documentBaseStoragePath = `${user.id}/${targetPatientId}/${documentId}`;
 
     // Update the storage_path
     await supabase

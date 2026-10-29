@@ -12,6 +12,7 @@ import {
   User,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ProfileSwitcher } from "@/components/patient/ProfileSwitcher";
 
 const NAV_LINKS = [
   { href: "/home", label: "Home", icon: Home },
@@ -71,7 +72,9 @@ export function AppHeader() {
         </nav>
 
         {/* Right Actions */}
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2 sm:gap-2.5">
+          <ProfileSwitcher />
+
           {!isEmergencyPage && (
             <Link
               href="/emergency"

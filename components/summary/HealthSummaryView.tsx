@@ -18,12 +18,15 @@ import {
   Loader2,
   Sparkles,
   Info,
+  Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { formatClinicalDate, getDateAge } from "@/lib/utils";
+import { usePatient } from "@/components/patient/PatientContext";
+import { matchPatientIdentity } from "@/lib/extraction/identity-matcher";
 
 interface ItemDocument {
   id: string;
@@ -31,6 +34,10 @@ interface ItemDocument {
   doc_date: string | null;
   doc_date_type?: string | null;
   storage_path: string;
+  patient_id?: string | null;
+  patient_name_as_printed?: string | null;
+  patient_name_latin?: string | null;
+  patient_dob?: string | null;
   identity_status?: string | null;
   attestation_timestamp?: string | null;
   attestation_type?: string | null;
@@ -110,6 +117,7 @@ const CATEGORY_CONFIG: Record<
 };
 
 export function HealthSummaryView() {
+  const { patients, activePatient, activePatientId } = usePatient();
   const [items, setItems] = useState<SummaryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -118,9 +126,36 @@ export function HealthSummaryView() {
   // Interaction states
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [attestingDocId, setAttestingDocId] = useState<string | null>(null);
+  const [movingDocId, setMovingDocId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [editingItem, setEditingItem] = useState<{ id: string; value: string } | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
+
+  // Manual Add Modal State
+  const [isAdding, setIsAdding] = useState(false);
+  const [newCategory, setNewCategory] = useState<string>("condition");
+  const [newValue, setNewValue] = useState("");
+  const [addingError, setAddingError] = useState<string | null>(null);
+  const [savingNew, setSavingNew] = useState(false);
+
+  const fetchItems = useCallback(async () => {
+    if (!activePatientId) return;
+    try {
+      setLoading(true);
+      const res = await fetch(`/api/items?patient_id=${activePatientId}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to load summary items");
+      setItems(data.items || []);
+    } catch (err: any) {
+      setError(err.message || "Could not retrieve records");
+    } finally {
+      setLoading(false);
+    }
+  }, [activePatientId]);
+
+  useEffect(() => {
+    fetchItems();
+  }, [fetchItems]);
 
   const handleAttest = async (docId: string, action: "attest_name_not_found" | "same_person") => {
     let note: string | undefined;
@@ -148,29 +183,23 @@ export function HealthSummaryView() {
     }
   };
 
-  // Manual Add Modal State
-  const [isAdding, setIsAdding] = useState(false);
-  const [newCategory, setNewCategory] = useState<string>("condition");
-  const [newValue, setNewValue] = useState("");
-  const [addingError, setAddingError] = useState<string | null>(null);
-  const [savingNew, setSavingNew] = useState(false);
-
-  const fetchItems = useCallback(async () => {
+  const handleMoveDocument = async (docId: string, targetPatientId: string) => {
+    setMovingDocId(docId);
     try {
-      const res = await fetch("/api/items");
+      const res = await fetch(`/api/documents/${docId}/move`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ target_patient_id: targetPatientId }),
+      });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to load summary items");
-      setItems(data.items || []);
+      if (!res.ok) throw new Error(data.error || "Failed to move document");
+      await fetchItems();
     } catch (err: any) {
-      setError(err.message || "Could not retrieve records");
+      alert(`Move document failed: ${err.message}`);
     } finally {
-      setLoading(false);
+      setMovingDocId(null);
     }
-  }, []);
-
-  useEffect(() => {
-    fetchItems();
-  }, [fetchItems]);
+  };
 
   const handleConfirm = async (itemId: string) => {
     setConfirmingId(itemId);
@@ -257,7 +286,11 @@ export function HealthSummaryView() {
       const res = await fetch("/api/items", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ category: newCategory, value: newValue.trim() }),
+        body: JSON.stringify({
+          category: newCategory,
+          value: newValue.trim(),
+          patient_id: activePatientId,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to add manual item");
@@ -312,6 +345,22 @@ export function HealthSummaryView() {
 
   return (
     <div className="space-y-4 pt-1">
+      {/* Active Patient Indicator Banner */}
+      {activePatient && (
+        <div className="flex items-center justify-between p-3.5 rounded-2xl bg-teal-50/80 border border-teal-200/80 text-teal-900 text-xs">
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-slate-700">Patient Records:</span>
+            <span className="font-bold text-teal-900 text-sm">{activePatient.full_name}</span>
+            <span className="px-2 py-0.5 rounded-full bg-teal-100 text-teal-800 font-bold text-[10px]">
+              {activePatient.relationship_label}
+            </span>
+          </div>
+          <span className="text-[11px] text-teal-700 hidden sm:inline">
+            Showing records scoped exclusively to this profile
+          </span>
+        </div>
+      )}
+
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -677,6 +726,42 @@ export function HealthSummaryView() {
                                         The patient name on this document differs from the active profile. Confirmation is locked to prevent medical record contamination. Choose an action:
                                       </p>
                                       <div className="flex items-center gap-2 pt-1 flex-wrap">
+                                        {/* Requirement B.5: "Move to <profile>" if printed name matches another profile in same account */}
+                                        {(() => {
+                                          const matchingProfile = patients.find((p) => {
+                                            if (p.id === activePatientId) return false;
+                                            if (!item.document?.patient_name_as_printed && !item.document?.patient_name_latin) return false;
+                                            const check = matchPatientIdentity(
+                                              { full_name: p.full_name, dob: p.dob },
+                                              {
+                                                patient_name_as_printed: item.document.patient_name_as_printed,
+                                                patient_name_latin: item.document.patient_name_latin,
+                                                patient_dob: item.document.patient_dob,
+                                              }
+                                            );
+                                            return check.outcome === "match";
+                                          });
+
+                                          if (!matchingProfile || !item.document?.id) return null;
+
+                                          return (
+                                            <Button
+                                              size="sm"
+                                              variant="outline"
+                                              disabled={movingDocId === item.document.id}
+                                              onClick={() => handleMoveDocument(item.document!.id, matchingProfile.id)}
+                                              className="h-7 text-xs bg-teal-50 text-teal-800 border-teal-300 hover:bg-teal-100 font-semibold gap-1.5"
+                                            >
+                                              {movingDocId === item.document.id ? (
+                                                <Loader2 className="h-3 w-3 animate-spin" />
+                                              ) : (
+                                                <Users className="h-3 w-3 text-teal-600" />
+                                              )}
+                                              <span>Move to {matchingProfile.full_name} ({matchingProfile.relationship_label})</span>
+                                            </Button>
+                                          );
+                                        })()}
+
                                         {item.document?.id && (
                                           <Button
                                             size="sm"

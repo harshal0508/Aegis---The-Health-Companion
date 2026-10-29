@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const supabase = await createClient();
 
@@ -14,12 +14,21 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // 1. Fetch user items
-    const { data: items, error: itemsErr } = await supabase
+    const { searchParams } = new URL(request.url);
+    const filterPatientId = searchParams.get("patient_id");
+
+    // 1. Fetch user items (filtered by patient_id if provided)
+    let query = supabase
       .from("items")
-      .select("id, category, value, quote, confidence, status, source, page_id, ocr_check, review_reason, created_at, last_confirmed_at")
+      .select("id, category, value, quote, confidence, status, source, page_id, patient_id, ocr_check, review_reason, created_at, last_confirmed_at")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false });
+
+    if (filterPatientId) {
+      query = query.eq("patient_id", filterPatientId);
+    }
+
+    const { data: items, error: itemsErr } = await query;
 
     if (itemsErr) {
       return NextResponse.json({ error: itemsErr.message }, { status: 500 });
@@ -39,6 +48,10 @@ export async function GET() {
         doc_date: string | null;
         doc_date_type?: string | null;
         storage_path: string;
+        patient_id?: string | null;
+        patient_name_as_printed?: string | null;
+        patient_name_latin?: string | null;
+        patient_dob?: string | null;
         identity_status?: string | null;
         attestation_timestamp?: string | null;
         attestation_type?: string | null;
@@ -60,7 +73,7 @@ export async function GET() {
         const { data: docs } = await supabase
           .from("documents")
           .select(
-            "id, doc_type, doc_date, doc_date_type, storage_path, identity_status, attestation_timestamp, attestation_type"
+            "id, doc_type, doc_date, doc_date_type, storage_path, patient_id, patient_name_as_printed, patient_name_latin, patient_dob, identity_status, attestation_timestamp, attestation_type"
           )
           .in("id", docIds);
 
@@ -85,6 +98,13 @@ export async function GET() {
               doc_date: docInfo.doc_date,
               doc_date_type: docInfo.doc_date_type || "unspecified",
               storage_path: docInfo.storage_path,
+              identity_status: docInfo.identity_status,
+              attestation_timestamp: docInfo.attestation_timestamp,
+              attestation_type: docInfo.attestation_type,
+              patient_name_as_printed: docInfo.patient_name_as_printed,
+              patient_name_latin: docInfo.patient_name_latin,
+              patient_dob: docInfo.patient_dob,
+              patient_id: docInfo.patient_id,
             }
           : null,
       };
@@ -110,7 +130,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { category, value } = body;
+    const { category, value, patient_id } = body;
 
     if (!category || !value || value.trim() === "") {
       return NextResponse.json(
@@ -135,10 +155,13 @@ export async function POST(request: Request) {
       );
     }
 
+    const targetPatientId = patient_id || user.id;
+
     const { data: item, error: insertErr } = await supabase
       .from("items")
       .insert({
         user_id: user.id,
+        patient_id: targetPatientId,
         category,
         value: value.trim(),
         source: "patient_entered",

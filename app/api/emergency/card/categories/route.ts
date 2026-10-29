@@ -15,7 +15,7 @@ export async function PATCH(request: Request) {
     }
 
     const body = await request.json().catch(() => ({}));
-    const { visible_categories } = body;
+    const { visible_categories, card_id, patient_id } = body;
 
     if (!Array.isArray(visible_categories)) {
       return NextResponse.json(
@@ -24,12 +24,20 @@ export async function PATCH(request: Request) {
       );
     }
 
-    const { data: updatedCard, error: updateErr } = await supabase
+    let updateQuery = supabase
       .from("emergency_cards")
       .update({ visible_categories })
-      .eq("user_id", user.id)
-      .select("id, visible_categories, active")
-      .single();
+      .select("id, visible_categories, active, patient_id");
+
+    if (card_id) {
+      updateQuery = updateQuery.eq("id", card_id);
+    } else if (patient_id) {
+      updateQuery = updateQuery.eq("patient_id", patient_id);
+    } else {
+      updateQuery = updateQuery.eq("user_id", user.id);
+    }
+
+    const { data: updatedCard, error: updateErr } = await updateQuery.single();
 
     if (updateErr || !updatedCard) {
       return NextResponse.json(

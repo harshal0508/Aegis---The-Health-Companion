@@ -28,6 +28,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { formatClinicalDate } from "@/lib/utils";
+import { usePatient } from "@/components/patient/PatientContext";
 
 interface CardData {
   id: string;
@@ -59,6 +60,7 @@ const CATEGORIES = [
 ];
 
 export function EmergencyCardManager() {
+  const { activePatient, activePatientId } = usePatient();
   const [loading, setLoading] = useState(true);
   const [card, setCard] = useState<CardData | null>(null);
   const [profile, setProfile] = useState<ProfileData | null>(null);
@@ -86,24 +88,28 @@ export function EmergencyCardManager() {
   const printCardRef = useRef<HTMLDivElement>(null);
 
   const fetchCardData = useCallback(async () => {
+    if (!activePatientId) return;
     try {
-      const res = await fetch("/api/emergency/card");
+      setLoading(true);
+      const res = await fetch(`/api/emergency/card?patient_id=${activePatientId}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to load card");
 
       setCard(data.card);
-      setProfile(data.profile);
+      setProfile(data.patient || data.profile);
       setConfirmedCounts(data.confirmedCounts || {});
       setAccessLogs(data.accessLogs || []);
       if (data.card) {
         setSelectedCats(data.card.visible_categories || []);
+      } else {
+        setSelectedCats(["allergy", "medication", "condition", "implant", "blood_group", "emergency_contact"]);
       }
     } catch (err: any) {
       console.error("Failed to fetch emergency card:", err.message);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [activePatientId]);
 
   useEffect(() => {
     fetchCardData();
@@ -136,7 +142,11 @@ export function EmergencyCardManager() {
         const res = await fetch("/api/emergency/card/categories", {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ visible_categories: next }),
+          body: JSON.stringify({
+            visible_categories: next,
+            card_id: card?.id,
+            patient_id: activePatientId,
+          }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Failed to update categories");
@@ -167,7 +177,11 @@ export function EmergencyCardManager() {
       const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ visible_categories: selectedCats }),
+        body: JSON.stringify({
+          visible_categories: selectedCats,
+          card_id: card?.id,
+          patient_id: activePatientId,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to generate emergency card");
@@ -201,7 +215,11 @@ export function EmergencyCardManager() {
       const res = await fetch("/api/emergency/card/toggle-active", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ active: nextState }),
+        body: JSON.stringify({
+          active: nextState,
+          card_id: card?.id,
+          patient_id: activePatientId,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to toggle card status");
@@ -271,6 +289,22 @@ export function EmergencyCardManager() {
           }
         }
       `}</style>
+
+      {/* Active Patient Indicator Banner */}
+      {activePatient && (
+        <div className="flex items-center justify-between p-3.5 rounded-2xl bg-teal-50/80 border border-teal-200/80 text-teal-900 text-xs">
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-slate-700">Medical ID Profile:</span>
+            <span className="font-bold text-teal-900 text-sm">{activePatient.full_name}</span>
+            <span className="px-2 py-0.5 rounded-full bg-teal-100 text-teal-800 font-bold text-[10px]">
+              {activePatient.relationship_label}
+            </span>
+          </div>
+          <span className="text-[11px] text-teal-700 hidden sm:inline">
+            QR code & card show exclusively this patient&apos;s verified records
+          </span>
+        </div>
+      )}
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b pb-6">

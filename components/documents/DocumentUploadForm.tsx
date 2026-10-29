@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { usePatient } from "@/components/patient/PatientContext";
 import {
   Select,
   SelectContent,
@@ -47,6 +48,7 @@ const DOC_TYPES = [
 export function DocumentUploadForm() {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { activePatient } = usePatient();
 
   const [docType, setDocType] = useState<string>("discharge_summary");
   const [docDate, setDocDate] = useState<string>("");
@@ -56,28 +58,9 @@ export function DocumentUploadForm() {
   const [uploadProgress, setUploadProgress] = useState<string>("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [attestedIdentity, setAttestedIdentity] = useState<boolean>(false);
-  const [patientName, setPatientName] = useState<string>("you");
 
   const supabase = createClient();
-
-  useEffect(() => {
-    async function loadProfile() {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (user) {
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("full_name")
-          .eq("id", user.id)
-          .single();
-        if (profile?.full_name) {
-          setPatientName(profile.full_name);
-        }
-      }
-    }
-    loadProfile();
-  }, []);
+  const patientName = activePatient?.full_name || "the active patient";
 
   const handleFilesSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = Array.from(e.target.files || []);
@@ -174,6 +157,7 @@ export function DocumentUploadForm() {
       const requestPayload = {
         doc_type: docType,
         doc_date: docDate,
+        patient_id: activePatient?.id,
         pages: pages.map((p, index) => ({
           page_no: index + 1,
           file_name: p.file.name || `page-${index + 1}.${p.isPdf ? "pdf" : "jpg"}`,
@@ -226,6 +210,22 @@ export function DocumentUploadForm() {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
+      {/* Active Patient Indicator Banner */}
+      {activePatient && (
+        <div className="flex items-center justify-between p-3 rounded-xl bg-teal-50/80 border border-teal-200/80 text-teal-900 text-xs">
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-slate-700">Target Profile:</span>
+            <span className="font-bold text-teal-900 text-sm">{activePatient.full_name}</span>
+            <span className="px-2 py-0.5 rounded-full bg-teal-100 text-teal-800 font-bold text-[10px]">
+              {activePatient.relationship_label}
+            </span>
+          </div>
+          <span className="text-[11px] text-teal-700 hidden sm:inline">
+            Records will be indexed under this profile
+          </span>
+        </div>
+      )}
+
       {/* Document metadata */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-2">

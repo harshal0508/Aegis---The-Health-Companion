@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateEmergencyToken, hashEmergencyToken } from "@/lib/emergency/token";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const supabase = await createClient();
 
@@ -15,29 +15,55 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // 1. Fetch user's emergency card
-    const { data: card } = await supabase
+    const { searchParams } = new URL(request.url);
+    const targetPatientId = searchParams.get("patient_id") || user.id;
+
+    // 1. Fetch patient's emergency card
+    let { data: card } = await supabase
       .from("emergency_cards")
-      .select("id, visible_categories, active, created_at")
-      .eq("user_id", user.id)
+      .select("id, visible_categories, active, created_at, patient_id")
+      .eq("patient_id", targetPatientId)
       .maybeSingle();
 
-    // 2. Fetch user's profile
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("full_name, blood_group, emergency_contact_name, emergency_contact_phone")
-      .eq("id", user.id)
-      .single();
+    if (!card && targetPatientId === user.id) {
+      const { data: legacyCard } = await supabase
+        .from("emergency_cards")
+        .select("id, visible_categories, active, created_at, patient_id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      card = legacyCard;
+    }
 
-    // 3. Fetch count of CONFIRMED items per category (Rule 4: items from documents with unresolved mismatch or no attestation never appear)
+    // 2. Fetch patient profile
+    let { data: patient } = await supabase
+      .from("patients")
+      .select("id, full_name, dob, blood_group, emergency_contact_name, emergency_contact_phone, is_self, relationship_label")
+      .eq("id", targetPatientId)
+      .maybeSingle();
+
+    if (!patient) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("full_name, dob, blood_group, emergency_contact_name, emergency_contact_phone")
+        .eq("id", user.id)
+        .single();
+      patient = profile ? { ...profile, id: user.id, is_self: true, relationship_label: "Self" } : null;
+    }
+
+    // 3. Fetch count of CONFIRMED items for this patient (Rule 4: items from documents with unresolved mismatch or no attestation never appear)
     const { data: rawConfirmedItems } = await supabase
       .from("items")
-      .select("id, category, value, page_id")
+      .select("id, category, value, page_id, patient_id")
       .eq("user_id", user.id)
       .eq("status", "confirmed");
 
+    const patientConfirmed = (rawConfirmedItems || []).filter((i: any) => {
+      if (i.patient_id) return i.patient_id === targetPatientId;
+      return targetPatientId === user.id;
+    });
+
     const pageIds = Array.from(
-      new Set((rawConfirmedItems || []).map((i) => i.page_id).filter(Boolean))
+      new Set(patientConfirmed.map((i) => i.page_id).filter(Boolean))
     );
     const invalidPageIds = new Set<string>();
 
@@ -77,7 +103,7 @@ export async function GET() {
       }
     }
 
-    const confirmedItems = (rawConfirmedItems || []).filter(
+    const confirmedItems = patientConfirmed.filter(
       (item) => !item.page_id || !invalidPageIds.has(item.page_id)
     );
 
@@ -111,7 +137,8 @@ export async function GET() {
 
     return NextResponse.json({
       card: card || null,
-      profile: profile || null,
+      profile: patient || null,
+      patient: patient || null,
       confirmedCounts,
       confirmedItems: confirmedItems || [],
       accessLogs,
@@ -138,17 +165,27 @@ export async function POST(request: Request) {
     const visibleCategories = Array.isArray(body.visible_categories)
       ? body.visible_categories
       : [];
+    const targetPatientId = body.patient_id || user.id;
 
     // Generate 128-bit random token
     const token = generateEmergencyToken();
     const tokenHash = hashEmergencyToken(token);
 
-    // Check if user already has a card
-    const { data: existingCard } = await supabase
+    // Check if patient already has a card
+    let { data: existingCard } = await supabase
       .from("emergency_cards")
       .select("id")
-      .eq("user_id", user.id)
+      .eq("patient_id", targetPatientId)
       .maybeSingle();
+
+    if (!existingCard && targetPatientId === user.id) {
+      const { data: legacyCard } = await supabase
+        .from("emergency_cards")
+        .select("id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      existingCard = legacyCard;
+    }
 
     let cardRecord;
     if (existingCard) {
@@ -157,10 +194,10 @@ export async function POST(request: Request) {
         .update({
           token_hash: tokenHash,
           visible_categories: visibleCategories,
+          patient_id: targetPatientId,
           active: true,
         })
         .eq("id", existingCard.id)
-        .eq("user_id", user.id)
         .select()
         .single();
 
@@ -171,6 +208,7 @@ export async function POST(request: Request) {
         .from("emergency_cards")
         .insert({
           user_id: user.id,
+          patient_id: targetPatientId,
           token_hash: tokenHash,
           visible_categories: visibleCategories,
           active: true,

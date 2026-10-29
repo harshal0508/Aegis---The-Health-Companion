@@ -15,18 +15,29 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const body = await request.json().catch(() => ({}));
+    const { card_id, patient_id } = body;
+
     const token = generateEmergencyToken();
     const tokenHash = hashEmergencyToken(token);
 
-    const { data: updatedCard, error: updateErr } = await supabase
+    let updateQuery = supabase
       .from("emergency_cards")
       .update({
         token_hash: tokenHash,
         active: true,
       })
-      .eq("user_id", user.id)
-      .select("id, visible_categories, active")
-      .single();
+      .select("id, visible_categories, active, patient_id");
+
+    if (card_id) {
+      updateQuery = updateQuery.eq("id", card_id);
+    } else if (patient_id) {
+      updateQuery = updateQuery.eq("patient_id", patient_id);
+    } else {
+      updateQuery = updateQuery.eq("user_id", user.id);
+    }
+
+    const { data: updatedCard, error: updateErr } = await updateQuery.single();
 
     if (updateErr || !updatedCard) {
       return NextResponse.json(

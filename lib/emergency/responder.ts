@@ -46,7 +46,7 @@ export async function getEmergencyResponderData(
 
   const { data: card, error: cardErr } = await supabase
     .from("emergency_cards")
-    .select("id, visible_categories, active, user_id, created_at")
+    .select("id, visible_categories, active, user_id, patient_id, created_at")
     .eq("token_hash", tokenHash)
     .maybeSingle();
 
@@ -76,18 +76,39 @@ export async function getEmergencyResponderData(
   const visibleCats: string[] = card.visible_categories || [];
 
   // 5. Fetch Profile (only exposed if category is enabled)
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("full_name, blood_group, emergency_contact_name, emergency_contact_phone")
-    .eq("id", card.user_id)
-    .single();
+  // Check patient profile first if patient_id is present, fallback to user account profile
+  let profile: any = null;
+  if (card.patient_id) {
+    const { data: patientRow } = await supabase
+      .from("patients")
+      .select("full_name, blood_group, emergency_contact_name, emergency_contact_phone")
+      .eq("id", card.patient_id)
+      .maybeSingle();
+    profile = patientRow;
+  }
+
+  if (!profile) {
+    const { data: profileRow } = await supabase
+      .from("profiles")
+      .select("full_name, blood_group, emergency_contact_name, emergency_contact_phone")
+      .eq("id", card.user_id)
+      .single();
+    profile = profileRow;
+  }
 
   // 6. Fetch ONLY CONFIRMED items for allowed categories
   // Internal IDs, storage URLs, and document paths are stripped
-  const { data: confirmedRows } = await supabase
+  let itemQuery = supabase
     .from("items")
-    .select("id, category, value, page_id, created_at, status")
-    .eq("user_id", card.user_id)
+    .select("id, category, value, page_id, created_at, status");
+
+  if (card.patient_id) {
+    itemQuery = itemQuery.eq("patient_id", card.patient_id);
+  } else {
+    itemQuery = itemQuery.eq("user_id", card.user_id);
+  }
+
+  const { data: confirmedRows } = await itemQuery
     .eq("status", "confirmed")
     .in("category", visibleCats);
 
