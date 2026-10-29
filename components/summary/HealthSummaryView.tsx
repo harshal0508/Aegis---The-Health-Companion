@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
 import {
   ShieldAlert,
@@ -19,6 +19,10 @@ import {
   Sparkles,
   Info,
   Users,
+  Clock,
+  FolderOpen,
+  Calendar,
+  FileText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -130,6 +134,9 @@ export function HealthSummaryView() {
   const [items, setItems] = useState<SummaryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // View Mode: Timeline (Concept 2) vs Category View
+  const [viewMode, setViewMode] = useState<"timeline" | "category">("timeline");
   const [selectedCategoryTab, setSelectedCategoryTab] = useState<string>("all");
 
   // Interaction states
@@ -336,6 +343,61 @@ export function HealthSummaryView() {
     return item.value;
   };
 
+  // Group items chronologically for Concept 2 (Timeline View)
+  const timelineGroups = useMemo(() => {
+    // Sort in reverse chronological order (newest first)
+    const sorted = [...items].sort((a, b) => {
+      const dateA = new Date(a.document?.doc_date || a.created_at).getTime();
+      const dateB = new Date(b.document?.doc_date || b.created_at).getTime();
+      return dateB - dateA;
+    });
+
+    // Group by Month & Year, then by Event (Document/Visit)
+    const monthsMap = new Map<
+      string,
+      Map<
+        string,
+        {
+          dateStr: string;
+          dateAge: string;
+          document: ItemDocument | null;
+          items: SummaryItem[];
+        }
+      >
+    >();
+
+    for (const item of sorted) {
+      const rawDate = item.document?.doc_date || item.created_at;
+      const d = new Date(rawDate);
+      const monthYear = !isNaN(d.getTime())
+        ? d.toLocaleDateString("en-IN", { month: "long", year: "numeric" }).toUpperCase()
+        : "OTHER RECORDS";
+
+      const eventKey = item.document?.id || `manual_${formatClinicalDate(rawDate)}`;
+
+      if (!monthsMap.has(monthYear)) {
+        monthsMap.set(monthYear, new Map());
+      }
+
+      const eventsMap = monthsMap.get(monthYear)!;
+      if (!eventsMap.has(eventKey)) {
+        eventsMap.set(eventKey, {
+          dateStr: formatClinicalDate(rawDate),
+          dateAge: getDateAge(rawDate),
+          document: item.document || null,
+          items: [],
+        });
+      }
+
+      eventsMap.get(eventKey)!.items.push(item);
+    }
+
+    return Array.from(monthsMap.entries()).map(([month, events]) => ({
+      month,
+      events: Array.from(events.values()),
+    }));
+  }, [items]);
+
   if (loading) {
     return (
       <div className="max-w-4xl mx-auto px-4 py-16 flex flex-col items-center justify-center space-y-3">
@@ -350,7 +412,7 @@ export function HealthSummaryView() {
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
-      {/* 1. Header & Active Patient Context */}
+      {/* 1. Header & Controls */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 pb-5">
         <div>
           <div className="flex items-center gap-2.5">
@@ -364,11 +426,39 @@ export function HealthSummaryView() {
             )}
           </div>
           <p className="text-xs text-slate-500 font-normal mt-1">
-            Verified clinical records, active prescriptions, and documented diagnoses
+            Chronological health timeline, verified prescriptions, and clinical diagnoses
           </p>
         </div>
 
+        {/* View Switcher (Timeline vs Category) & Add Button */}
         <div className="flex items-center gap-3">
+          <div className="inline-flex items-center p-1 rounded-lg bg-slate-100 border border-slate-200/80 text-xs font-medium">
+            <button
+              onClick={() => setViewMode("timeline")}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all",
+                viewMode === "timeline"
+                  ? "bg-white text-slate-900 shadow-2xs font-semibold"
+                  : "text-slate-500 hover:text-slate-800"
+              )}
+            >
+              <Clock className="h-3.5 w-3.5 text-teal-600" />
+              <span>Timeline</span>
+            </button>
+            <button
+              onClick={() => setViewMode("category")}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all",
+                viewMode === "category"
+                  ? "bg-white text-slate-900 shadow-2xs font-semibold"
+                  : "text-slate-500 hover:text-slate-800"
+              )}
+            >
+              <FolderOpen className="h-3.5 w-3.5 text-teal-600" />
+              <span>By Category</span>
+            </button>
+          </div>
+
           <Button
             size="sm"
             onClick={() => setIsAdding(!isAdding)}
@@ -380,44 +470,7 @@ export function HealthSummaryView() {
         </div>
       </div>
 
-      {/* 2. Sleek Modern Tab Bar (No Pill Shapes) */}
-      <div className="flex items-center gap-6 border-b border-slate-200 overflow-x-auto no-scrollbar select-none pt-1">
-        {CATEGORY_TABS.map((tab) => {
-          const isActive = selectedCategoryTab === tab.id;
-          const count =
-            tab.id === "all" ? items.length : items.filter((i) => i.category === tab.id).length;
-
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setSelectedCategoryTab(tab.id)}
-              className={cn(
-                "pb-3 text-sm transition-all relative flex items-center gap-2 whitespace-nowrap",
-                isActive
-                  ? "text-teal-900 font-semibold"
-                  : "text-slate-500 hover:text-slate-800 font-medium"
-              )}
-            >
-              <span>{tab.label}</span>
-              <span
-                className={cn(
-                  "text-[11px] px-1.5 py-0.5 rounded font-mono font-medium",
-                  isActive
-                    ? "bg-teal-100 text-teal-800 font-bold"
-                    : "text-slate-400 bg-slate-100"
-                )}
-              >
-                {count}
-              </span>
-              {isActive && (
-                <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-teal-600 rounded-full" />
-              )}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* 3. Subtle Status Summary Strip (No Pill Badges) */}
+      {/* 2. Status Summary Strip */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-slate-500 py-1">
         <div className="flex items-center gap-3">
           <span className="flex items-center gap-1.5 font-medium text-slate-700">
@@ -429,7 +482,7 @@ export function HealthSummaryView() {
               <span className="text-slate-300">•</span>
               <span className="flex items-center gap-1.5 text-amber-700 font-medium">
                 <span className="h-2 w-2 rounded-full bg-amber-500" />
-                {unconfirmedCount} awaiting your confirmation
+                {unconfirmedCount} awaiting confirmation
               </span>
             </>
           )}
@@ -444,9 +497,7 @@ export function HealthSummaryView() {
       {isAdding && (
         <div className="p-5 rounded-xl border border-teal-200 bg-teal-50/20 shadow-xs space-y-4">
           <div className="flex items-center justify-between border-b border-teal-100 pb-2.5">
-            <h3 className="text-sm font-semibold text-slate-900">
-              Add Record Manually
-            </h3>
+            <h3 className="text-sm font-semibold text-slate-900">Add Record Manually</h3>
             <button
               onClick={() => setIsAdding(false)}
               className="text-xs text-slate-400 hover:text-slate-600"
@@ -464,9 +515,7 @@ export function HealthSummaryView() {
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
-                <label className="text-xs font-semibold text-slate-700 block mb-1">
-                  Category
-                </label>
+                <label className="text-xs font-semibold text-slate-700 block mb-1">Category</label>
                 <select
                   value={newCategory}
                   onChange={(e) => setNewCategory(e.target.value)}
@@ -523,384 +572,571 @@ export function HealthSummaryView() {
         </div>
       )}
 
-      {/* 4. Clinical Category Sections (Clean, Uncluttered Editorial List) */}
-      <div className="space-y-5">
-        {Object.keys(CATEGORY_CONFIG)
-          .filter(
-            (categoryKey) =>
-              selectedCategoryTab === "all" || categoryKey === selectedCategoryTab
-          )
-          .map((categoryKey) => {
-            const config = CATEGORY_CONFIG[categoryKey];
-            const categoryItems = items.filter((i) => i.category === categoryKey);
-            const Icon = config.icon;
-
-            return (
-              <div
-                key={categoryKey}
-                className="bg-white rounded-xl border border-slate-200/90 shadow-2xs overflow-hidden"
-              >
-                {/* Clean Section Header */}
-                <div className="bg-slate-50/70 border-b border-slate-100 py-3 px-5 flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <div className={cn("p-1.5 rounded-lg border", config.color)}>
-                      <Icon className="h-4 w-4" />
-                    </div>
-                    <h2 className="text-sm font-semibold text-slate-800">
-                      {config.label}
-                    </h2>
-                  </div>
-                  <span className="text-xs text-slate-400 font-medium">
-                    {categoryItems.length} {categoryItems.length === 1 ? "record" : "records"}
+      {/* ────────────────────────────────────────────────────────────────────────── */}
+      {/* CONCEPT 2: CHRONOLOGICAL TIMELINE VIEW                                     */}
+      {/* ────────────────────────────────────────────────────────────────────────── */}
+      {viewMode === "timeline" ? (
+        <div className="space-y-10 pt-2">
+          {timelineGroups.length === 0 ? (
+            <div className="apple-card p-12 text-center text-slate-400 text-sm">
+              No medical records or document scans recorded yet.
+            </div>
+          ) : (
+            timelineGroups.map(({ month, events }) => (
+              <div key={month} className="space-y-4">
+                {/* Month Milestone Header */}
+                <div className="flex items-center gap-3">
+                  <div className="h-2 w-2 rounded-full bg-teal-600" />
+                  <span className="text-xs font-bold tracking-wider text-slate-500 uppercase">
+                    {month}
                   </span>
+                  <div className="h-[1px] bg-slate-200 flex-1" />
                 </div>
 
-                {/* Items List */}
-                <div className="divide-y divide-slate-100">
-                  {categoryItems.length === 0 ? (
-                    <div className="py-7 px-5 text-xs text-slate-400 italic text-center">
-                      {config.emptyText}
-                    </div>
-                  ) : (
-                    categoryItems.map((item) => {
-                      const displayValue =
-                        item.category === "allergy"
-                          ? formatAllergyDisplay(item)
-                          : item.value;
-                      const isEditing = editingItem?.id === item.id;
-                      const purpose =
-                        item.category === "medication"
-                          ? getMedicationPurpose(item.value)
-                          : null;
+                {/* Vertical Timeline Spine */}
+                <div className="relative pl-6 sm:pl-8 border-l-2 border-slate-200/80 space-y-6 ml-1 sm:ml-2">
+                  {events.map((event, idx) => {
+                    const doc = event.document;
+                    const eventTitle = doc?.doc_type || "Direct Clinical Entry";
 
-                      return (
-                        <div
-                          key={item.id}
-                          className={cn(
-                            "p-4 sm:p-5 transition-colors",
-                            item.status === "confirmed"
-                              ? "hover:bg-slate-50/40"
-                              : "bg-amber-50/15 hover:bg-amber-50/25"
-                          )}
-                        >
-                          <div className="flex items-start justify-between gap-4">
-                            <div className="space-y-1.5 flex-1 min-w-0">
-                              {/* Status banner: Only show for unconfirmed items, edits, or OCR discrepancies */}
-                              {(item.status !== "confirmed" ||
-                                item.source === "patient_entered" ||
-                                item.ocr_check?.state === "disagree" ||
-                                (item.review_reason && item.review_reason.includes("OCR"))) && (
-                                <div className="flex items-center gap-2.5 flex-wrap text-xs">
-                                  {item.status === "needs_review" ? (
-                                    <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
-                                      <AlertTriangle className="h-3 w-3 text-amber-600" />
-                                      Needs Review
-                                    </span>
-                                  ) : item.status === "extracted" ? (
-                                    <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-600 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
-                                      <Sparkles className="h-3 w-3 text-teal-600" />
-                                      Extracted from Scan
-                                    </span>
-                                  ) : null}
+                    return (
+                      <div key={idx} className="relative">
+                        {/* Timeline Node Icon */}
+                        <div className="absolute -left-[31px] sm:-left-[39px] top-1.5 h-4 w-4 rounded-full bg-white border-2 border-teal-600 ring-4 ring-white" />
 
-                                  {item.source === "patient_entered" && (
-                                    <span className="text-[11px] text-slate-400">
-                                      {item.document ? "Edited by you" : "Added manually"}
-                                    </span>
+                        {/* Event Card */}
+                        <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs overflow-hidden">
+                          {/* Event Card Header */}
+                          <div className="bg-slate-50/70 border-b border-slate-100 py-3 px-4 sm:px-5 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <FileText className="h-4 w-4 text-teal-600" />
+                              <span className="text-xs font-bold text-slate-900">
+                                {eventTitle}
+                              </span>
+                              {doc && (
+                                <Link
+                                  href={`/documents/${doc.id}`}
+                                  className="text-[11px] text-teal-700 hover:underline inline-flex items-center gap-1 font-medium ml-1"
+                                >
+                                  <span>View Document</span>
+                                  <ExternalLink className="h-3 w-3" />
+                                </Link>
+                              )}
+                            </div>
+
+                            <div className="flex items-center gap-2 text-xs text-slate-400">
+                              <Calendar className="h-3.5 w-3.5" />
+                              <span>{event.dateStr}</span>
+                              {event.dateAge && (
+                                <>
+                                  <span>•</span>
+                                  <span className="text-slate-500 font-medium">
+                                    {event.dateAge}
+                                  </span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Event Records */}
+                          <div className="divide-y divide-slate-100">
+                            {event.items.map((item) => {
+                              const displayValue =
+                                item.category === "allergy"
+                                  ? formatAllergyDisplay(item)
+                                  : item.value;
+                              const isEditing = editingItem?.id === item.id;
+                              const purpose =
+                                item.category === "medication"
+                                  ? getMedicationPurpose(item.value)
+                                  : null;
+                              const CategoryIcon =
+                                CATEGORY_CONFIG[item.category]?.icon || Pill;
+                              const categoryColor =
+                                CATEGORY_CONFIG[item.category]?.color ||
+                                "text-slate-600 bg-slate-50";
+
+                              return (
+                                <div
+                                  key={item.id}
+                                  className={cn(
+                                    "p-4 sm:p-5 transition-colors",
+                                    item.status === "confirmed"
+                                      ? "hover:bg-slate-50/40"
+                                      : "bg-amber-50/15 hover:bg-amber-50/25"
                                   )}
+                                >
+                                  <div className="flex items-start justify-between gap-4">
+                                    <div className="flex items-start gap-3 flex-1 min-w-0">
+                                      {/* Category Indicator Icon */}
+                                      <div
+                                        className={cn(
+                                          "p-1.5 rounded-lg border shrink-0 mt-0.5",
+                                          categoryColor
+                                        )}
+                                        title={CATEGORY_CONFIG[item.category]?.label}
+                                      >
+                                        <CategoryIcon className="h-3.5 w-3.5" />
+                                      </div>
 
-                                  {(item.ocr_check?.state === "disagree" ||
+                                      <div className="space-y-1 flex-1 min-w-0">
+                                        {/* Status Flag if not confirmed */}
+                                        {(item.status !== "confirmed" ||
+                                          item.source === "patient_entered" ||
+                                          item.ocr_check?.state === "disagree" ||
+                                          (item.review_reason &&
+                                            item.review_reason.includes("OCR"))) && (
+                                          <div className="flex items-center gap-2 flex-wrap text-xs pb-0.5">
+                                            {item.status === "needs_review" ? (
+                                              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                                                <AlertTriangle className="h-3 w-3 text-amber-600" />
+                                                Needs Review
+                                              </span>
+                                            ) : item.status === "extracted" ? (
+                                              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-600 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                                                <Sparkles className="h-3 w-3 text-teal-600" />
+                                                Extracted from Scan
+                                              </span>
+                                            ) : null}
+
+                                            {item.source === "patient_entered" && (
+                                              <span className="text-[11px] text-slate-400">
+                                                {item.document ? "Edited by you" : "Added manually"}
+                                              </span>
+                                            )}
+
+                                            {(item.ocr_check?.state === "disagree" ||
+                                              (item.review_reason &&
+                                                item.review_reason.includes("OCR"))) && (
+                                              <span className="inline-flex items-center gap-1 text-[11px] text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
+                                                <AlertTriangle className="h-3 w-3 text-rose-600" />
+                                                Second reading disagrees
+                                              </span>
+                                            )}
+                                          </div>
+                                        )}
+
+                                        {/* Item Title */}
+                                        {isEditing ? (
+                                          <div className="pt-1 flex items-center gap-2">
+                                            <Input
+                                              value={editingItem.value}
+                                              onChange={(e) =>
+                                                setEditingItem({
+                                                  id: item.id,
+                                                  value: e.target.value,
+                                                })
+                                              }
+                                              className="h-8 text-sm bg-white"
+                                            />
+                                            <Button
+                                              size="sm"
+                                              onClick={handleSaveEdit}
+                                              disabled={savingEdit}
+                                              className="h-8 text-xs bg-teal-600 hover:bg-teal-700 text-white"
+                                            >
+                                              {savingEdit ? (
+                                                <Loader2 className="h-3 w-3 animate-spin" />
+                                              ) : (
+                                                "Save"
+                                              )}
+                                            </Button>
+                                            <Button
+                                              size="sm"
+                                              variant="ghost"
+                                              onClick={() => setEditingItem(null)}
+                                              disabled={savingEdit}
+                                              className="h-8 text-xs"
+                                            >
+                                              Cancel
+                                            </Button>
+                                          </div>
+                                        ) : (
+                                          <div>
+                                            <h3 className="text-sm sm:text-base font-semibold text-slate-900 leading-snug">
+                                              {displayValue}
+                                            </h3>
+                                            {/* Purpose note */}
+                                            {item.category === "medication" && purpose && (
+                                              <p className="text-xs text-slate-500 font-normal mt-0.5">
+                                                Used for: {purpose}
+                                              </p>
+                                            )}
+                                          </div>
+                                        )}
+
+                                        {/* Page & Confirmation Metadata */}
+                                        <div className="flex items-center gap-2 text-xs text-slate-400 pt-0.5">
+                                          {item.page_no && <span>Page {item.page_no}</span>}
+                                          {item.page_no && item.last_confirmed_at && <span>•</span>}
+                                          {item.last_confirmed_at && (
+                                            <span className="text-emerald-700 font-medium">
+                                              Confirmed {formatClinicalDate(item.last_confirmed_at)}
+                                            </span>
+                                          )}
+                                        </div>
+
+                                        {/* Confirmation bar if unconfirmed */}
+                                        {item.status !== "confirmed" && !isEditing && (
+                                          <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between gap-3">
+                                            <span className="text-[11px] text-slate-500">
+                                              {item.quote
+                                                ? `Document quote: "${item.quote}"`
+                                                : "Verify against document before confirming"}
+                                            </span>
+                                            <Button
+                                              size="sm"
+                                              onClick={() => handleConfirm(item.id)}
+                                              disabled={confirmingId === item.id}
+                                              className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-md shadow-2xs"
+                                            >
+                                              {confirmingId === item.id ? (
+                                                <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                                              ) : (
+                                                <Check className="h-3 w-3 mr-1" />
+                                              )}
+                                              Confirm Record
+                                            </Button>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    {/* Edit & Delete Action Buttons */}
+                                    <div className="flex items-center gap-0.5 shrink-0 pt-0.5">
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        onClick={() =>
+                                          setEditingItem({ id: item.id, value: item.value })
+                                        }
+                                        className="h-7 w-7 p-0 text-slate-400 hover:text-slate-700 rounded-md"
+                                        title="Edit item"
+                                      >
+                                        <Edit2 className="h-3.5 w-3.5" />
+                                      </Button>
+
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        disabled={deletingId === item.id}
+                                        onClick={() => handleDelete(item.id)}
+                                        className="h-7 w-7 p-0 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md"
+                                        title="Remove item"
+                                      >
+                                        {deletingId === item.id ? (
+                                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                        ) : (
+                                          <Trash2 className="h-3.5 w-3.5" />
+                                        )}
+                                      </Button>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      ) : (
+        /* ────────────────────────────────────────────────────────────────────────── */
+        /* CATEGORY VIEW (DESIGN A: Underline Tabs, No Pills, Clean List)              */
+        /* ────────────────────────────────────────────────────────────────────────── */
+        <div className="space-y-5">
+          {/* Underline Tabs */}
+          <div className="flex items-center gap-6 border-b border-slate-200 overflow-x-auto no-scrollbar select-none pt-1">
+            {CATEGORY_TABS.map((tab) => {
+              const isActive = selectedCategoryTab === tab.id;
+              const count =
+                tab.id === "all"
+                  ? items.length
+                  : items.filter((i) => i.category === tab.id).length;
+
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setSelectedCategoryTab(tab.id)}
+                  className={cn(
+                    "pb-3 text-sm transition-all relative flex items-center gap-2 whitespace-nowrap",
+                    isActive
+                      ? "text-teal-900 font-semibold"
+                      : "text-slate-500 hover:text-slate-800 font-medium"
+                  )}
+                >
+                  <span>{tab.label}</span>
+                  <span
+                    className={cn(
+                      "text-[11px] px-1.5 py-0.5 rounded font-mono font-medium",
+                      isActive
+                        ? "bg-teal-100 text-teal-800 font-bold"
+                        : "text-slate-400 bg-slate-100"
+                    )}
+                  >
+                    {count}
+                  </span>
+                  {isActive && (
+                    <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-teal-600 rounded-full" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Category Sections */}
+          <div className="space-y-5">
+            {Object.keys(CATEGORY_CONFIG)
+              .filter(
+                (categoryKey) =>
+                  selectedCategoryTab === "all" || categoryKey === selectedCategoryTab
+              )
+              .map((categoryKey) => {
+                const config = CATEGORY_CONFIG[categoryKey];
+                const categoryItems = items.filter((i) => i.category === categoryKey);
+                const Icon = config.icon;
+
+                return (
+                  <div
+                    key={categoryKey}
+                    className="bg-white rounded-xl border border-slate-200/90 shadow-2xs overflow-hidden"
+                  >
+                    {/* Section Header */}
+                    <div className="bg-slate-50/70 border-b border-slate-100 py-3 px-5 flex items-center justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <div className={cn("p-1.5 rounded-lg border", config.color)}>
+                          <Icon className="h-4 w-4" />
+                        </div>
+                        <h2 className="text-sm font-semibold text-slate-800">{config.label}</h2>
+                      </div>
+                      <span className="text-xs text-slate-400 font-medium">
+                        {categoryItems.length} {categoryItems.length === 1 ? "record" : "records"}
+                      </span>
+                    </div>
+
+                    {/* Items List */}
+                    <div className="divide-y divide-slate-100">
+                      {categoryItems.length === 0 ? (
+                        <div className="py-7 px-5 text-xs text-slate-400 italic text-center">
+                          {config.emptyText}
+                        </div>
+                      ) : (
+                        categoryItems.map((item) => {
+                          const displayValue =
+                            item.category === "allergy"
+                              ? formatAllergyDisplay(item)
+                              : item.value;
+                          const isEditing = editingItem?.id === item.id;
+                          const purpose =
+                            item.category === "medication"
+                              ? getMedicationPurpose(item.value)
+                              : null;
+
+                          return (
+                            <div
+                              key={item.id}
+                              className={cn(
+                                "p-4 sm:p-5 transition-colors",
+                                item.status === "confirmed"
+                                  ? "hover:bg-slate-50/40"
+                                  : "bg-amber-50/15 hover:bg-amber-50/25"
+                              )}
+                            >
+                              <div className="flex items-start justify-between gap-4">
+                                <div className="space-y-1.5 flex-1 min-w-0">
+                                  {/* Status indicator: Clean text, zero pill shapes */}
+                                  {(item.status !== "confirmed" ||
+                                    item.source === "patient_entered" ||
+                                    item.ocr_check?.state === "disagree" ||
                                     (item.review_reason &&
                                       item.review_reason.includes("OCR"))) && (
-                                    <span className="inline-flex items-center gap-1 text-[11px] text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
-                                      <AlertTriangle className="h-3 w-3 text-rose-600" />
-                                      Second reading disagrees:{" "}
-                                      {item.review_reason
-                                        ? item.review_reason.replace(/^OCR disagreement:\s*/i, "")
-                                        : "dose"}
-                                    </span>
+                                    <div className="flex items-center gap-2.5 flex-wrap text-xs">
+                                      {item.status === "needs_review" ? (
+                                        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                                          <AlertTriangle className="h-3 w-3 text-amber-600" />
+                                          Needs Review
+                                        </span>
+                                      ) : item.status === "extracted" ? (
+                                        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-600 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                                          <Sparkles className="h-3 w-3 text-teal-600" />
+                                          Extracted from Scan
+                                        </span>
+                                      ) : null}
+
+                                      {item.source === "patient_entered" && (
+                                        <span className="text-[11px] text-slate-400">
+                                          {item.document ? "Edited by you" : "Added manually"}
+                                        </span>
+                                      )}
+
+                                      {(item.ocr_check?.state === "disagree" ||
+                                        (item.review_reason &&
+                                          item.review_reason.includes("OCR"))) && (
+                                        <span className="inline-flex items-center gap-1 text-[11px] text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
+                                          <AlertTriangle className="h-3 w-3 text-rose-600" />
+                                          Second reading disagrees:{" "}
+                                          {item.review_reason
+                                            ? item.review_reason.replace(
+                                                /^OCR disagreement:\s*/i,
+                                                ""
+                                              )
+                                            : "dose"}
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  {/* Item Main Value */}
+                                  {isEditing ? (
+                                    <div className="pt-1 flex items-center gap-2">
+                                      <Input
+                                        value={editingItem.value}
+                                        onChange={(e) =>
+                                          setEditingItem({ id: item.id, value: e.target.value })
+                                        }
+                                        className="h-8 text-sm bg-white"
+                                      />
+                                      <Button
+                                        size="sm"
+                                        onClick={handleSaveEdit}
+                                        disabled={savingEdit}
+                                        className="h-8 text-xs bg-teal-600 hover:bg-teal-700 text-white"
+                                      >
+                                        {savingEdit ? (
+                                          <Loader2 className="h-3 w-3 animate-spin" />
+                                        ) : (
+                                          "Save"
+                                        )}
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        onClick={() => setEditingItem(null)}
+                                        disabled={savingEdit}
+                                        className="h-8 text-xs"
+                                      >
+                                        Cancel
+                                      </Button>
+                                    </div>
+                                  ) : (
+                                    <div className="pt-0.5">
+                                      <h3 className="text-base font-semibold text-slate-900 leading-snug">
+                                        {displayValue}
+                                      </h3>
+                                      {item.category === "medication" && purpose && (
+                                        <p className="text-xs text-slate-500 font-normal mt-0.5">
+                                          Used for: {purpose}
+                                        </p>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  {/* Provenance Metadata Line */}
+                                  {!isEditing && (
+                                    <div className="pt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-400">
+                                      {item.document ? (
+                                        <Link
+                                          href={`/documents/${item.document.id}`}
+                                          className="text-teal-700 hover:underline font-medium inline-flex items-center gap-1"
+                                        >
+                                          <span>{item.document.doc_type || "Document"}</span>
+                                          {item.page_no && <span>(Page {item.page_no})</span>}
+                                          <ExternalLink className="h-3 w-3" />
+                                        </Link>
+                                      ) : (
+                                        <span>Direct Entry</span>
+                                      )}
+                                      {item.document?.doc_date && (
+                                        <>
+                                          <span>•</span>
+                                          <span>
+                                            {formatClinicalDate(item.document.doc_date)} (
+                                            {getDateAge(item.document.doc_date)})
+                                          </span>
+                                        </>
+                                      )}
+                                      {item.last_confirmed_at && (
+                                        <>
+                                          <span>•</span>
+                                          <span className="text-emerald-700 font-medium">
+                                            Confirmed {formatClinicalDate(item.last_confirmed_at)}
+                                          </span>
+                                        </>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  {/* Confirmation Bar for Unconfirmed Items */}
+                                  {item.status !== "confirmed" && !isEditing && (
+                                    <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between gap-3">
+                                      <span className="text-[11px] text-slate-500">
+                                        {item.quote
+                                          ? `Document quote: "${item.quote}"`
+                                          : "Verify against document before confirming"}
+                                      </span>
+                                      <Button
+                                        size="sm"
+                                        onClick={() => handleConfirm(item.id)}
+                                        disabled={confirmingId === item.id}
+                                        className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-md shadow-2xs"
+                                      >
+                                        {confirmingId === item.id ? (
+                                          <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                                        ) : (
+                                          <Check className="h-3 w-3 mr-1" />
+                                        )}
+                                        Confirm Record
+                                      </Button>
+                                    </div>
                                   )}
                                 </div>
-                              )}
 
-                              {/* Item Main Value */}
-                              {isEditing ? (
-                                <div className="pt-1 flex items-center gap-2">
-                                  <Input
-                                    value={editingItem.value}
-                                    onChange={(e) =>
-                                      setEditingItem({ id: item.id, value: e.target.value })
-                                    }
-                                    className="h-8 text-sm bg-white"
-                                  />
-                                  <Button
-                                    size="sm"
-                                    onClick={handleSaveEdit}
-                                    disabled={savingEdit}
-                                    className="h-8 text-xs bg-teal-600 hover:bg-teal-700 text-white"
-                                  >
-                                    {savingEdit ? <Loader2 className="h-3 w-3 animate-spin" /> : "Save"}
-                                  </Button>
+                                {/* Actions */}
+                                <div className="flex items-center gap-0.5 shrink-0 pt-0.5">
                                   <Button
                                     size="sm"
                                     variant="ghost"
-                                    onClick={() => setEditingItem(null)}
-                                    disabled={savingEdit}
-                                    className="h-8 text-xs"
+                                    onClick={() =>
+                                      setEditingItem({ id: item.id, value: item.value })
+                                    }
+                                    className="h-7 w-7 p-0 text-slate-400 hover:text-slate-700 rounded-md"
+                                    title="Edit item"
                                   >
-                                    Cancel
+                                    <Edit2 className="h-3.5 w-3.5" />
+                                  </Button>
+
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    disabled={deletingId === item.id}
+                                    onClick={() => handleDelete(item.id)}
+                                    className="h-7 w-7 p-0 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md"
+                                    title="Remove item"
+                                  >
+                                    {deletingId === item.id ? (
+                                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                    ) : (
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    )}
                                   </Button>
                                 </div>
-                              ) : (
-                                <div className="pt-0.5">
-                                  <h3 className="text-base font-semibold text-slate-900 leading-snug">
-                                    {displayValue}
-                                  </h3>
-                                  {/* Purpose: subtle natural subtitle without pill box */}
-                                  {item.category === "medication" && purpose && (
-                                    <p className="text-xs text-slate-500 font-normal mt-0.5">
-                                      Used for: {purpose}
-                                    </p>
-                                  )}
-                                </div>
-                              )}
-
-                              {/* Concise Provenance & Source Citation */}
-                              {!isEditing && (
-                                <div className="pt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-400">
-                                  {item.document ? (
-                                    <Link
-                                      href={`/documents/${item.document.id}`}
-                                      className="text-teal-700 hover:underline font-medium inline-flex items-center gap-1"
-                                    >
-                                      <span>{item.document.doc_type || "Document"}</span>
-                                      {item.page_no && <span>(Page {item.page_no})</span>}
-                                      <ExternalLink className="h-3 w-3" />
-                                    </Link>
-                                  ) : (
-                                    <span>Direct Entry</span>
-                                  )}
-                                  {item.document?.doc_date && (
-                                    <>
-                                      <span>•</span>
-                                      <span>
-                                        {formatClinicalDate(item.document.doc_date)} (
-                                        {getDateAge(item.document.doc_date)})
-                                      </span>
-                                    </>
-                                  )}
-                                  {item.last_confirmed_at && (
-                                    <>
-                                      <span>•</span>
-                                      <span className="text-emerald-700">
-                                        Confirmed {formatClinicalDate(item.last_confirmed_at)}
-                                      </span>
-                                    </>
-                                  )}
-                                </div>
-                              )}
-
-                              {/* Confirmation & Mismatch Actions for unconfirmed records */}
-                              {item.status !== "confirmed" &&
-                                !isEditing &&
-                                (() => {
-                                  const isIdentityMismatch =
-                                    item.review_reason ===
-                                      "Report appears to be for someone else" ||
-                                    (item.document?.identity_status === "mismatch" &&
-                                      item.document?.attestation_type !==
-                                        "same_person_override");
-
-                                  const isNameNotFoundUnattested =
-                                    item.document?.identity_status === "name_not_found" &&
-                                    !item.document?.attestation_timestamp;
-
-                                  const isConfirmDisabled =
-                                    confirmingId === item.id ||
-                                    isIdentityMismatch ||
-                                    isNameNotFoundUnattested;
-
-                                  return (
-                                    <div className="mt-3 space-y-2 pt-2 border-t border-slate-100">
-                                      {isIdentityMismatch ? (
-                                        <div className="bg-rose-50 border border-rose-200 rounded-lg p-3 text-xs text-rose-900 space-y-2">
-                                          <div className="flex items-center gap-1.5 font-bold text-rose-800">
-                                            <AlertTriangle className="h-4 w-4 text-rose-600 flex-shrink-0" />
-                                            <span>
-                                              Patient Identity Mismatch: Report appears to be for
-                                              someone else
-                                            </span>
-                                          </div>
-                                          <p className="text-[11px] text-rose-700 leading-relaxed">
-                                            The patient name on this document differs from the
-                                            active profile. Confirmation is locked to prevent
-                                            record contamination.
-                                          </p>
-                                          <div className="flex items-center gap-2 pt-1 flex-wrap">
-                                            {(() => {
-                                              const matchingProfile = patients.find((p) => {
-                                                if (p.id === activePatientId) return false;
-                                                if (
-                                                  !item.document?.patient_name_as_printed &&
-                                                  !item.document?.patient_name_latin
-                                                )
-                                                  return false;
-                                                const check = matchPatientIdentity(
-                                                  { full_name: p.full_name, dob: p.dob },
-                                                  {
-                                                    patient_name_as_printed:
-                                                      item.document.patient_name_as_printed,
-                                                    patient_name_latin:
-                                                      item.document.patient_name_latin,
-                                                    patient_dob: item.document.patient_dob,
-                                                  }
-                                                );
-                                                return check.outcome === "match";
-                                              });
-
-                                              if (!matchingProfile || !item.document?.id)
-                                                return null;
-
-                                              return (
-                                                <Button
-                                                  size="sm"
-                                                  variant="outline"
-                                                  disabled={movingDocId === item.document.id}
-                                                  onClick={() =>
-                                                    handleMoveDocument(
-                                                      item.document!.id,
-                                                      matchingProfile.id
-                                                    )
-                                                  }
-                                                  className="h-7 text-xs bg-teal-50 text-teal-800 border-teal-300 hover:bg-teal-100 font-semibold gap-1.5"
-                                                >
-                                                  {movingDocId === item.document.id ? (
-                                                    <Loader2 className="h-3 w-3 animate-spin" />
-                                                  ) : (
-                                                    <Users className="h-3 w-3 text-teal-600" />
-                                                  )}
-                                                  <span>
-                                                    Move to {matchingProfile.full_name} (
-                                                    {matchingProfile.relationship_label})
-                                                  </span>
-                                                </Button>
-                                              );
-                                            })()}
-
-                                            {item.document?.id && (
-                                              <Button
-                                                size="sm"
-                                                variant="outline"
-                                                disabled={attestingDocId === item.document.id}
-                                                onClick={() =>
-                                                  handleAttest(item.document!.id, "same_person")
-                                                }
-                                                className="h-7 text-xs bg-white text-rose-900 border-rose-300 hover:bg-rose-100 font-semibold"
-                                              >
-                                                Confirm Same Person
-                                              </Button>
-                                            )}
-                                          </div>
-                                        </div>
-                                      ) : isNameNotFoundUnattested ? (
-                                        <div className="bg-amber-50 border border-amber-200 rounded-lg p-2.5 text-xs text-amber-900 space-y-1.5">
-                                          <div className="flex items-center gap-1.5 font-bold text-amber-800">
-                                            <Info className="h-4 w-4 text-amber-600 flex-shrink-0" />
-                                            <span>Patient Name Not Detected on Report</span>
-                                          </div>
-                                          <p className="text-[11px] text-amber-800">
-                                            Please attest this document belongs to this patient
-                                            before confirming.
-                                          </p>
-                                          {item.document?.id && (
-                                            <Button
-                                              size="sm"
-                                              variant="outline"
-                                              disabled={attestingDocId === item.document.id}
-                                              onClick={() =>
-                                                handleAttest(
-                                                  item.document!.id,
-                                                  "attest_name_not_found"
-                                                )
-                                              }
-                                              className="h-7 text-xs bg-white text-amber-900 border-amber-300 hover:bg-amber-100 font-semibold"
-                                            >
-                                              Attest Document
-                                            </Button>
-                                          )}
-                                        </div>
-                                      ) : null}
-
-                                      <div className="flex items-center justify-between gap-3 pt-1">
-                                        <span className="text-[11px] text-slate-500">
-                                          {item.quote
-                                            ? `Document quote: "${item.quote}"`
-                                            : "Verify against your physical prescription or scan"}
-                                        </span>
-                                        <Button
-                                          size="sm"
-                                          disabled={isConfirmDisabled}
-                                          onClick={() => handleConfirm(item.id)}
-                                          className={`text-white text-xs h-7 px-3 font-semibold shadow-2xs rounded-md ${
-                                            isConfirmDisabled
-                                              ? "bg-slate-300 cursor-not-allowed opacity-60"
-                                              : "bg-emerald-600 hover:bg-emerald-700"
-                                          }`}
-                                        >
-                                          {confirmingId === item.id ? (
-                                            <Loader2 className="h-3 w-3 animate-spin mr-1" />
-                                          ) : (
-                                            <Check className="h-3 w-3 mr-1" />
-                                          )}
-                                          {isIdentityMismatch
-                                            ? "Confirm Locked"
-                                            : "Confirm Record"}
-                                        </Button>
-                                      </div>
-                                    </div>
-                                  );
-                                })()}
+                              </div>
                             </div>
-
-                            {/* Unobtrusive Actions (Edit & Delete) */}
-                            <div className="flex items-center gap-0.5 shrink-0 pt-0.5">
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() =>
-                                  setEditingItem({ id: item.id, value: item.value })
-                                }
-                                className="h-7 w-7 p-0 text-slate-400 hover:text-slate-700 rounded-md"
-                                title="Edit item"
-                              >
-                                <Edit2 className="h-3.5 w-3.5" />
-                              </Button>
-
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                disabled={deletingId === item.id}
-                                onClick={() => handleDelete(item.id)}
-                                className="h-7 w-7 p-0 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md"
-                                title="Remove item"
-                              >
-                                {deletingId === item.id ? (
-                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                ) : (
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                )}
-                              </Button>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-              </div>
-            );
-          })}
-      </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
