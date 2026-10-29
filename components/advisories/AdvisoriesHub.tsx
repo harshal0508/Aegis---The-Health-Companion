@@ -136,15 +136,40 @@ export function AdvisoriesHub({
   const [pushStatus, setPushStatus] = useState<"idle" | "requesting" | "subscribed" | "unsupported">("idle");
   const [pushMessage, setPushMessage] = useState<string>("");
 
-  // Get official advisories for current locality
-  const { advisories } = getAdvisoriesForLocality(
-    currentLocality.pincode || currentLocality.district
-  );
+  // Official IDSP weekly advisories state
+  const [officialAdvisories, setOfficialAdvisories] = useState<DiseaseAdvisory[]>(() => {
+    return getAdvisoriesForLocality(currentLocality.pincode || currentLocality.district).advisories;
+  });
+
   const matchedGuidance = matchConfirmedPrecautions(confirmedItems);
 
-  // Fetch live district news whenever canonical district changes
+  // Sync official IDSP advisories and live district news whenever canonical district changes
   useEffect(() => {
     let isMounted = true;
+
+    // 1. Immediate local update from IDSP weekly baseline
+    const local = getAdvisoriesForLocality(currentLocality.pincode || currentLocality.district);
+    setOfficialAdvisories(local.advisories);
+
+    // 2. Fetch latest ingested IDSP records from database API
+    async function loadOfficial() {
+      try {
+        const queryDistrict = currentLocality.district || currentLocality.city || "Indore";
+        const res = await fetch(
+          `/api/advisories?district=${encodeURIComponent(queryDistrict)}&pincode=${encodeURIComponent(
+            currentLocality.pincode
+          )}`
+        );
+        const data = await res.json();
+        if (isMounted && data.advisories && data.advisories.length > 0) {
+          setOfficialAdvisories(data.advisories);
+        }
+      } catch (e) {
+        // Fallback already active from baseline
+      }
+    }
+
+    // 3. Fetch live regional news
     async function loadNews() {
       setLoadingNews(true);
       try {
@@ -164,7 +189,10 @@ export function AdvisoriesHub({
         if (isMounted) setLoadingNews(false);
       }
     }
+
+    loadOfficial();
     loadNews();
+
     return () => {
       isMounted = false;
     };
@@ -383,7 +411,7 @@ export function AdvisoriesHub({
                 : "bg-slate-200/80 text-slate-600"
             }`}
           >
-            {advisories.length}
+            {officialAdvisories.length}
           </span>
         </button>
 
@@ -444,7 +472,7 @@ export function AdvisoriesHub({
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {advisories.map((advisory) => {
+            {officialAdvisories.map((advisory) => {
               const theme = CATEGORY_THEME[advisory.category] || CATEGORY_THEME.general;
               const CategoryIcon = theme.icon;
 

@@ -229,6 +229,16 @@ export const REGIONAL_DISEASE_ADVISORIES: DiseaseAdvisory[] = [
  * Strict Rendering Rule: Only entries with complete source metadata or
  * explicitly tagged as sample demonstration data are returned.
  */
+import {
+  OFFICIAL_IDSP_WEEKLY_BASELINE,
+  transformIdspToDiseaseAdvisory,
+} from "./idsp-ingestion";
+
+/**
+ * Retrieves official government disease advisories and weekly IDSP outbreak reports for a given locality.
+ * Prioritizes active weekly IDSP (Integrated Disease Surveillance Programme) outbreak bulletins,
+ * accompanied by standard seasonal public health protocols.
+ */
 export function getAdvisoriesForLocality(
   cityOrPincode: string
 ): { advisories: DiseaseAdvisory[]; matchedLocality: string } {
@@ -240,26 +250,48 @@ export function getAdvisoriesForLocality(
     return hasSource || a.is_sample_demo;
   });
 
-  const query = cityOrPincode.trim().toLowerCase();
+  const query = (cityOrPincode || "").trim().toLowerCase();
+  const pinPrefix = query.slice(0, 3);
+
+  // 1. Check for official IDSP weekly outbreak reports matching this locality
+  const matchedIdspItems = OFFICIAL_IDSP_WEEKLY_BASELINE.filter((item) => {
+    const dLower = item.district.toLowerCase();
+    const sLower = item.state.toLowerCase();
+    if (query && (dLower.includes(query) || query.includes(dLower) || sLower.includes(query))) {
+      return true;
+    }
+    return false;
+  });
+
+  const idspAdvisories = matchedIdspItems.map((item, idx) =>
+    transformIdspToDiseaseAdvisory(item, idx)
+  );
+
   if (!query) {
+    const defaultSeasonal = validAdvisories.filter((a) =>
+      a.affectedLocalities.includes("Bhopal")
+    );
     return {
-      advisories: validAdvisories.filter((a) =>
-        a.affectedLocalities.includes("Bhopal")
-      ),
+      advisories: [...idspAdvisories, ...defaultSeasonal],
       matchedLocality: "Bhopal (462001)",
     };
   }
 
-  // Match 3-digit prefix of a pincode
-  const pinPrefix = query.slice(0, 3);
-  const byPin = validAdvisories.filter((a) =>
-    a.pincodePrefixes.includes(pinPrefix)
-  );
+  // Match 3-digit prefix of a pincode (only when input is numeric)
+  const isPin = /^\d{3,6}$/.test(query);
+  const byPin = isPin
+    ? validAdvisories.filter((a) => a.pincodePrefixes.includes(pinPrefix))
+    : [];
 
-  if (byPin.length > 0) {
+  if (isPin && (byPin.length > 0 || idspAdvisories.length > 0)) {
     const known = SUPPORTED_LOCALITIES.find((l) => l.pincode.startsWith(pinPrefix));
+    // Prioritize official weekly IDSP records, supplemented by seasonal protocols
+    const combined = [
+      ...idspAdvisories,
+      ...byPin.filter((b) => !idspAdvisories.some((i) => i.id === b.id)),
+    ];
     return {
-      advisories: byPin,
+      advisories: combined.length > 0 ? combined : byPin,
       matchedLocality: known ? `${known.city} (${cityOrPincode})` : `Pincode ${cityOrPincode}`,
     };
   }
@@ -269,12 +301,16 @@ export function getAdvisoriesForLocality(
     a.affectedLocalities.some((loc) => loc.toLowerCase().includes(query))
   );
 
-  if (byCity.length > 0) {
+  if (byCity.length > 0 || idspAdvisories.length > 0) {
     const known = SUPPORTED_LOCALITIES.find((l) =>
       l.city.toLowerCase().includes(query)
     );
+    const combined = [
+      ...idspAdvisories,
+      ...byCity.filter((b) => !idspAdvisories.some((i) => i.id === b.id)),
+    ];
     return {
-      advisories: byCity,
+      advisories: combined.length > 0 ? combined : byCity,
       matchedLocality: known ? `${known.city} (${known.pincode})` : cityOrPincode,
     };
   }
