@@ -29,13 +29,13 @@ export function AppHeader() {
     <header className="sticky top-0 z-40 w-full bg-white/90 backdrop-blur-md border-b border-slate-200/80 shadow-2xs select-none">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 flex items-center justify-between h-16">
         {/* Brand Logo */}
-        <Link href="/home" className="flex items-center group py-1" aria-label="Aegis Home">
+        <Link href="/home" className="flex items-center group py-0.5" aria-label="Aegis Home">
           <Image
             src="/images/aegis-logo.png"
             alt="Aegis - Patient-Owned Health Platform"
-            width={128}
-            height={44}
-            className="h-10 sm:h-11 w-auto object-contain transition-transform group-hover:scale-[1.02]"
+            width={140}
+            height={52}
+            className="h-11 sm:h-12 md:h-[48px] w-auto object-contain transition-transform group-hover:scale-[1.02]"
             priority
           />
         </Link>
