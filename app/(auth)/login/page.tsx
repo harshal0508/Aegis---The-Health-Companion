@@ -14,14 +14,9 @@ export default function LoginPage() {
         <div className="inline-flex items-center justify-center h-14 w-14 rounded-2xl bg-gradient-to-tr from-teal-600 to-teal-500 text-white shadow-lg shadow-teal-600/20 mb-4 hover:scale-105 transition-transform">
           <Activity className="h-7 w-7" />
         </div>
-        <div className="flex items-center justify-center gap-2">
-          <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">
-            MedAnchor
-          </h1>
-          <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 bg-teal-50 text-teal-700 border border-teal-200/80 rounded-md">
-            Clinical
-          </span>
-        </div>
+        <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">
+          MedAnchor
+        </h1>
         <p className="text-xs text-slate-500 font-medium mt-1.5">
           Patient-Owned Personal Health Record &amp; Document Intelligence
         </p>
