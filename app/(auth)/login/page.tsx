@@ -1,5 +1,6 @@
+import Image from "next/image";
 import { LoginForm } from "@/components/auth/LoginForm";
-import { Activity, ShieldCheck, Lock } from "lucide-react";
+import { ShieldCheck, Lock } from "lucide-react";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -11,8 +12,15 @@ export default function LoginPage() {
     <div className="min-h-screen bg-[#F8FAFC] flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8 antialiased selection:bg-teal-100 selection:text-teal-900">
       <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
         {/* Brand Logo & Header */}
-        <div className="inline-flex items-center justify-center h-14 w-14 rounded-2xl bg-gradient-to-tr from-teal-600 to-teal-500 text-white shadow-lg shadow-teal-600/20 mb-4 hover:scale-105 transition-transform">
-          <Activity className="h-7 w-7" />
+        <div className="inline-flex items-center justify-center h-14 w-14 mb-4 hover:scale-105 transition-transform">
+          <Image
+            src="/images/aegis-icon.png"
+            alt="Aegis Logo"
+            width={56}
+            height={56}
+            className="h-14 w-14 object-contain"
+            priority
+          />
         </div>
         <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">
           Aegis

@@ -29,15 +29,25 @@ export function AppHeader() {
     <header className="sticky top-0 z-40 w-full bg-white/90 backdrop-blur-md border-b border-slate-200/80 shadow-2xs select-none">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 flex items-center justify-between h-16">
         {/* Brand Logo */}
-        <Link href="/home" className="flex items-center group py-0.5" aria-label="Aegis Home">
-          <Image
-            src="/images/aegis-logo.png"
-            alt="Aegis - Patient-Owned Health Platform"
-            width={140}
-            height={52}
-            className="h-11 sm:h-12 md:h-[48px] w-auto object-contain transition-transform group-hover:scale-[1.02]"
-            priority
-          />
+        <Link href="/home" className="flex items-center gap-2.5 group" aria-label="Aegis Home">
+          <div className="h-9 w-9 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+            <Image
+              src="/images/aegis-icon.png"
+              alt="Aegis Logo"
+              width={36}
+              height={36}
+              className="h-9 w-9 object-contain"
+              priority
+            />
+          </div>
+          <div>
+            <span className="font-extrabold text-base tracking-tight text-slate-900 leading-none block">
+              Aegis
+            </span>
+            <p className="text-[10px] text-slate-400 font-medium leading-none mt-1">
+              Patient-Owned Health Platform
+            </p>
+          </div>
         </Link>
 
         {/* Desktop Navigation Links */}
