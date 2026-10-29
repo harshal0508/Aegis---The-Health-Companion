@@ -3,11 +3,11 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: {
-    default: "MedAnchor",
-    template: "%s | MedAnchor",
+    default: "Aegis",
+    template: "%s | Aegis",
   },
   description:
-    "MedAnchor — Grounded Clinical Document Intelligence for Emergency Care & Advisories. Paper records, verified by the patient, ready when emergencies strike.",
+    "Aegis — Grounded Clinical Document Intelligence for Emergency Care & Advisories. Paper records, verified by the patient, ready when emergencies strike.",
   // Prevent search engines from indexing health data pages
   robots: { index: false, follow: false },
 };

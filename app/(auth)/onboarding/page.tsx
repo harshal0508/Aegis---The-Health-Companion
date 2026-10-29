@@ -3,7 +3,7 @@ import { Activity, ShieldCheck } from "lucide-react";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Set up your profile | MedAnchor",
+  title: "Set up your profile | Aegis",
 };
 
 export default function OnboardingPage() {
@@ -14,7 +14,7 @@ export default function OnboardingPage() {
           <Activity className="h-7 w-7" />
         </div>
         <span className="text-2xl font-extrabold tracking-tight text-slate-900">
-          MedAnchor
+          Aegis
         </span>
         <h1 className="mt-3 text-lg font-bold text-slate-900">
           Set up your clinical profile

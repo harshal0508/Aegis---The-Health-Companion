@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "What This App Is & Isn't | MedAnchor",
+  title: "What This App Is & Isn't | Aegis",
   description:
     "Clinical scope, boundaries, and safety disclosures for patients and healthcare providers.",
 };
@@ -32,7 +32,7 @@ export default function AboutClinicalScopePage() {
             className="inline-flex items-center gap-1.5 text-xs font-semibold text-teal-700 hover:text-teal-800 transition-colors"
           >
             <ArrowLeft className="h-4 w-4" />
-            Back to MedAnchor
+            Back to Aegis
           </Link>
 
           <div>
@@ -43,7 +43,7 @@ export default function AboutClinicalScopePage() {
               What This App Is &amp; Isn&apos;t
             </h1>
             <p className="mt-2 text-sm text-gray-600 leading-relaxed">
-              MedAnchor is an assistive organizational tool designed to help patients maintain ownership
+              Aegis is an assistive organizational tool designed to help patients maintain ownership
               over their medical papers. Please read these clinical boundaries and disclosures carefully.
             </p>
           </div>
@@ -139,7 +139,7 @@ export default function AboutClinicalScopePage() {
           </CardHeader>
           <CardContent className="space-y-2.5 text-xs text-amber-950 leading-relaxed">
             <p>
-              The information stored in MedAnchor reflects <strong>only what the patient has uploaded and confirmed</strong>. It is subject to several natural limitations:
+              The information stored in Aegis reflects <strong>only what the patient has uploaded and confirmed</strong>. It is subject to several natural limitations:
             </p>
             <ul className="list-disc pl-5 space-y-1.5 text-amber-900">
               <li>
@@ -173,7 +173,7 @@ export default function AboutClinicalScopePage() {
               Always verify clinically before administering treatment or prescribing medications.
             </p>
             <p>
-              The emergency card and health summaries provided by MedAnchor are assembled from patient-uploaded
+              The emergency card and health summaries provided by Aegis are assembled from patient-uploaded
               documents. While every extracted item is pinned to an underlying document date and patient confirmation,
               it remains patient-provided data.
             </p>
@@ -191,7 +191,7 @@ export default function AboutClinicalScopePage() {
             <span>Patient Data Ownership Commitment</span>
           </div>
           <p>
-            MedAnchor is built on a patient-first ownership model. Your records are never sold to pharmaceutical companies,
+            Aegis is built on a patient-first ownership model. Your records are never sold to pharmaceutical companies,
             advertisers, or insurers. You retain full control to edit, delete, or revoke access to your documents and emergency card at any time.
           </p>
         </div>

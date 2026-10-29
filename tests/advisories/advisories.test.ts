@@ -9,7 +9,7 @@ import {
   VERIFIED_PUBLIC_GUIDELINES,
 } from "@/lib/advisories/condition-precautions";
 
-describe("MedAnchor · Health Advisories & Official Reference Invariants", () => {
+describe("Aegis · Health Advisories & Official Reference Invariants", () => {
   describe("Locality Advisory Data & Sourcing Invariants", () => {
     it("every advisory entry has non-empty source_title, source_url, report_date, and retrieved_at", () => {
       expect(REGIONAL_DISEASE_ADVISORIES.length).toBeGreaterThan(0);

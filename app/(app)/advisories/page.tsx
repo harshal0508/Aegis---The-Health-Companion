@@ -4,7 +4,7 @@ import { AdvisoriesHub } from "@/components/advisories/AdvisoriesHub";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Health Advisories & References | MedAnchor",
+  title: "Health Advisories & References | Aegis",
   description:
     "Regional health advisory digest (demonstration) and official public health reference citations matching confirmed records.",
 };

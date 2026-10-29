@@ -3,7 +3,7 @@ import { Activity, ShieldCheck, Lock } from "lucide-react";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Sign In | MedAnchor",
+  title: "Sign In | Aegis",
 };
 
 export default function LoginPage() {
@@ -15,7 +15,7 @@ export default function LoginPage() {
           <Activity className="h-7 w-7" />
         </div>
         <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">
-          MedAnchor
+          Aegis
         </h1>
         <p className="text-xs text-slate-500 font-medium mt-1.5">
           Patient-Owned Personal Health Record &amp; Document Intelligence

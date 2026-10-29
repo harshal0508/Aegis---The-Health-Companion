@@ -635,7 +635,7 @@ export function AdvisoriesHub({
             </div>
             <p className="leading-relaxed">
               Quoted verbatim from published national clinical guidelines matching diagnoses confirmed in your records.
-              MedAnchor does not author instructions or artificial medical rules.
+              Aegis does not author instructions or artificial medical rules.
             </p>
           </div>
 
@@ -712,7 +712,7 @@ export function AdvisoriesHub({
               Assistive Public Health Notice
             </span>
             <p className="leading-relaxed text-slate-500 text-xs">
-              MedAnchor organizes public surveillance reports and official guideline references. This service does not provide clinical diagnoses, evaluate active symptoms, or recommend treatment changes. Always consult your treating physician.
+              Aegis organizes public surveillance reports and official guideline references. This service does not provide clinical diagnoses, evaluate active symptoms, or recommend treatment changes. Always consult your treating physician.
             </p>
           </div>
         </div>

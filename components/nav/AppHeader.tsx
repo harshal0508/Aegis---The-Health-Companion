@@ -35,7 +35,7 @@ export function AppHeader() {
           </div>
           <div>
             <span className="font-extrabold text-base tracking-tight text-slate-900 leading-none block">
-              MedAnchor
+              Aegis
             </span>
             <p className="text-[10px] text-slate-400 font-medium leading-none mt-1">
               Patient-Owned Health Platform
