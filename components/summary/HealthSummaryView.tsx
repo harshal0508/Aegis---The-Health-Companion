@@ -665,15 +665,9 @@ export function HealthSummaryView() {
                                 </div>
                               )}
 
-                              {/* Concise Provenance & Source Citation (Replaces giant grey box) */}
+                              {/* Concise Provenance & Source Citation */}
                               {!isEditing && (
                                 <div className="pt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-400">
-                                  {item.quote && (
-                                    <span className="italic text-slate-600 font-normal">
-                                      &ldquo;{item.quote}&rdquo;
-                                    </span>
-                                  )}
-                                  {item.quote && <span>•</span>}
                                   {item.document ? (
                                     <Link
                                       href={`/documents/${item.document.id}`}
@@ -839,7 +833,9 @@ export function HealthSummaryView() {
 
                                       <div className="flex items-center justify-between gap-3 pt-1">
                                         <span className="text-[11px] text-slate-500">
-                                          Verify against your physical prescription or scan
+                                          {item.quote
+                                            ? `Document quote: "${item.quote}"`
+                                            : "Verify against your physical prescription or scan"}
                                         </span>
                                         <Button
                                           size="sm"
