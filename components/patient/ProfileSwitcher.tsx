@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import Link from "next/link";
 import {
   Users,
   User,
@@ -12,6 +13,8 @@ import {
   Loader2,
   ShieldCheck,
   X,
+  Settings,
+  ArrowRight,
 } from "lucide-react";
 import { usePatient, type PatientProfile } from "./PatientContext";
 import { Button } from "@/components/ui/button";
@@ -265,6 +268,21 @@ export function ProfileSwitcher() {
                   Account limit reached (3 of 3 profiles)
                 </p>
               )}
+            </div>
+
+            {/* Account Settings & Clinical Scope */}
+            <div className="pt-2 border-t border-slate-100 mt-2">
+              <Link
+                href="/profile"
+                onClick={() => setIsOpen(false)}
+                className="w-full flex items-center justify-between py-1.5 px-3 rounded-xl text-xs text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition-colors group"
+              >
+                <div className="flex items-center gap-2">
+                  <Settings className="h-3.5 w-3.5 text-slate-400 group-hover:text-slate-600" />
+                  <span>Account &amp; Settings</span>
+                </div>
+                <ArrowRight className="h-3 w-3 text-slate-400 group-hover:translate-x-0.5 transition-transform" />
+              </Link>
             </div>
           </div>
         </>

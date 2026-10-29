@@ -9,17 +9,15 @@ import {
   FileText,
   FolderOpen,
   Bell,
-  User,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ProfileSwitcher } from "@/components/patient/ProfileSwitcher";
 
 const NAV_LINKS = [
   { href: "/home", label: "Home", icon: Home },
-  { href: "/summary", label: "Health Summary", icon: FileText },
-  { href: "/advisories", label: "Surveillance Alerts", icon: Bell },
+  { href: "/summary", label: "Summary", icon: FileText },
   { href: "/documents", label: "Documents", icon: FolderOpen },
-  { href: "/emergency", label: "Emergency Card", icon: ShieldAlert },
+  { href: "/advisories", label: "Outbreak Watch", icon: Bell },
 ] as const;
 
 export function AppHeader() {
@@ -29,23 +27,18 @@ export function AppHeader() {
   return (
     <header className="sticky top-0 z-40 w-full bg-white/90 backdrop-blur-md border-b border-slate-200/80 shadow-2xs select-none">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 flex items-center justify-between h-16">
-        {/* Brand Logo */}
+        {/* Brand Logo - Clean Single-Line */}
         <Link href="/home" className="flex items-center gap-2.5 group">
           <div className="h-9 w-9 rounded-xl bg-gradient-to-tr from-teal-600 to-teal-500 text-white flex items-center justify-center shadow-xs group-hover:scale-105 transition-transform">
             <Activity className="h-5 w-5" />
           </div>
-          <div>
-            <span className="font-extrabold text-base tracking-tight text-slate-900 leading-none block">
-              MedAnchor
-            </span>
-            <p className="text-[10px] text-slate-400 font-medium leading-none mt-1">
-              Patient-Owned Health Platform
-            </p>
-          </div>
+          <span className="font-extrabold text-base tracking-tight text-slate-900 leading-none">
+            MedAnchor
+          </span>
         </Link>
 
-        {/* Desktop Navigation Links (hidden on mobile, shown on md+) */}
-        <nav className="hidden md:flex items-center gap-1" aria-label="Desktop navigation">
+        {/* Desktop Navigation Links */}
+        <nav className="hidden md:flex items-center gap-1.5" aria-label="Desktop navigation">
           {NAV_LINKS.map(({ href, label }) => {
             const isActive = pathname === href || (href !== "/home" && pathname.startsWith(href + "/"));
             return (
@@ -67,31 +60,21 @@ export function AppHeader() {
         </nav>
 
         {/* Right Actions */}
-        <div className="flex items-center gap-2 sm:gap-2.5">
+        <div className="flex items-center gap-3">
           <ProfileSwitcher />
 
-          {!isEmergencyPage && (
-            <Link
-              href="/emergency"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 transition-colors shadow-2xs"
-              title="One-Tap Emergency Medical Card"
-            >
-              <ShieldAlert className="h-4 w-4 text-rose-600 animate-pulse" />
-              <span>SOS Medical ID</span>
-            </Link>
-          )}
-
           <Link
-            href="/profile"
+            href="/emergency"
             className={cn(
-              "h-9 w-9 rounded-full flex items-center justify-center font-bold text-xs transition-colors border",
-              pathname === "/profile"
-                ? "bg-teal-50 text-teal-800 border-teal-300"
-                : "bg-slate-100 text-slate-700 border-slate-200 hover:border-slate-300 hover:text-slate-900"
+              "flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all shadow-2xs",
+              isEmergencyPage
+                ? "bg-rose-100 text-rose-800 border border-rose-300 ring-2 ring-rose-500/20"
+                : "bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100"
             )}
-            title="Profile & Settings"
+            title="One-Tap Emergency Medical Card"
           >
-            <User className="h-4 w-4" />
+            <ShieldAlert className="h-4 w-4 text-rose-600 animate-pulse" />
+            <span>SOS Medical ID</span>
           </Link>
         </div>
       </div>
