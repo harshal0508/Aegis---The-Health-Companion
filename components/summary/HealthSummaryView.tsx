@@ -21,10 +21,8 @@ import {
   Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { formatClinicalDate, getDateAge } from "@/lib/utils";
+import { formatClinicalDate, getDateAge, cn } from "@/lib/utils";
 import { usePatient } from "@/components/patient/PatientContext";
 import { matchPatientIdentity } from "@/lib/extraction/identity-matcher";
 import { getMedicationPurpose } from "@/lib/medications/purpose-resolver";
@@ -82,40 +80,50 @@ const CATEGORY_CONFIG: Record<
   allergy: {
     label: "Allergies & Adverse Reactions",
     icon: ShieldAlert,
-    emptyText: "No allergy information recorded",
-    color: "text-rose-600 bg-rose-50 border-rose-200",
+    emptyText: "No allergies recorded for this patient",
+    color: "text-rose-600 bg-rose-50/70 border-rose-200",
   },
   medication: {
     label: "Active Medications",
     icon: Pill,
-    emptyText: "No medications recorded",
-    color: "text-blue-600 bg-blue-50 border-blue-200",
+    emptyText: "No active medications recorded",
+    color: "text-blue-600 bg-blue-50/70 border-blue-200",
   },
   condition: {
     label: "Conditions & Diagnoses",
     icon: Activity,
     emptyText: "No conditions or diagnoses recorded",
-    color: "text-amber-600 bg-amber-50 border-amber-200",
+    color: "text-purple-600 bg-purple-50/70 border-purple-200",
   },
   surgery: {
     label: "Surgeries & Procedures",
     icon: Scissors,
     emptyText: "No surgeries or procedures recorded",
-    color: "text-purple-600 bg-purple-50 border-purple-200",
+    color: "text-indigo-600 bg-indigo-50/70 border-indigo-200",
   },
   lab: {
     label: "Lab Results & Investigations",
     icon: FileCheck2,
-    emptyText: "No lab results recorded",
-    color: "text-emerald-600 bg-emerald-50 border-emerald-200",
+    emptyText: "No lab reports recorded",
+    color: "text-emerald-600 bg-emerald-50/70 border-emerald-200",
   },
   implant: {
     label: "Implants & Devices",
     icon: Cpu,
     emptyText: "No implants or devices recorded",
-    color: "text-slate-600 bg-slate-50 border-slate-200",
+    color: "text-slate-600 bg-slate-50/70 border-slate-200",
   },
 };
+
+const CATEGORY_TABS = [
+  { id: "all", label: "All Records" },
+  { id: "medication", label: "Medications" },
+  { id: "allergy", label: "Allergies" },
+  { id: "condition", label: "Conditions" },
+  { id: "lab", label: "Labs" },
+  { id: "surgery", label: "Procedures" },
+  { id: "implant", label: "Devices" },
+] as const;
 
 export function HealthSummaryView() {
   const { patients, activePatient, activePatientId } = usePatient();
@@ -306,10 +314,6 @@ export function HealthSummaryView() {
     }
   };
 
-  /**
-   * Safety formatting for allergy statements:
-   * Rule: NKDA displays as "No known drug allergies, per <doc type>, <date> (<age>)", never a bare "No allergies".
-   */
   const formatAllergyDisplay = (item: SummaryItem): string => {
     const isNkda =
       item.value.toLowerCase().includes("no known drug allergies") ||
@@ -334,9 +338,9 @@ export function HealthSummaryView() {
 
   if (loading) {
     return (
-      <div className="max-w-4xl mx-auto px-4 py-12 flex flex-col items-center justify-center space-y-3">
-        <Loader2 className="h-8 w-8 text-teal-600 animate-spin" />
-        <p className="text-sm text-muted-foreground">Loading your clinical health summary...</p>
+      <div className="max-w-4xl mx-auto px-4 py-16 flex flex-col items-center justify-center space-y-3">
+        <Loader2 className="h-7 w-7 text-teal-600 animate-spin" />
+        <p className="text-xs text-slate-500 font-medium">Loading clinical health records...</p>
       </div>
     );
   }
@@ -345,172 +349,182 @@ export function HealthSummaryView() {
   const unconfirmedCount = items.filter((i) => i.status !== "confirmed").length;
 
   return (
-    <div className="space-y-4 pt-1">
-      {/* Active Patient Indicator Banner */}
-      {activePatient && (
-        <div className="flex items-center justify-between p-3.5 rounded-2xl bg-teal-50/80 border border-teal-200/80 text-teal-900 text-xs">
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-slate-700">Patient Records:</span>
-            <span className="font-bold text-teal-900 text-sm">{activePatient.full_name}</span>
-            <span className="px-2 py-0.5 rounded-full bg-teal-100 text-teal-800 font-bold text-[10px]">
-              {activePatient.relationship_label}
-            </span>
-          </div>
-          <span className="text-[11px] text-teal-700 hidden sm:inline">
-            Showing records scoped exclusively to this profile
-          </span>
-        </div>
-      )}
-
-      {/* Page Header */}
-      <div className="flex items-center justify-between">
+    <div className="space-y-6 max-w-5xl mx-auto">
+      {/* 1. Header & Active Patient Context */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 pb-5">
         <div>
-          <h1 className="text-3xl sm:text-4xl font-serif font-normal tracking-tight text-slate-900">
-            Health Summary
-          </h1>
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-3xl sm:text-4xl font-serif font-normal tracking-tight text-slate-900">
+              Health Summary
+            </h1>
+            {activePatient && (
+              <span className="text-xs font-semibold px-2.5 py-0.5 rounded bg-teal-50 text-teal-800 border border-teal-200/80">
+                {activePatient.full_name} ({activePatient.relationship_label})
+              </span>
+            )}
+          </div>
           <p className="text-xs text-slate-500 font-normal mt-1">
-            {confirmedCount} confirmed • {unconfirmedCount} pending
+            Verified clinical records, active prescriptions, and documented diagnoses
           </p>
         </div>
 
-        <Button
-          size="sm"
-          onClick={() => setIsAdding(!isAdding)}
-          className="bg-teal-600 hover:bg-teal-700 text-white rounded-full text-xs font-semibold h-8 px-3 gap-1 shadow-xs"
-        >
-          <Plus className="h-3.5 w-3.5" />
-          <span>Add</span>
-        </Button>
+        <div className="flex items-center gap-3">
+          <Button
+            size="sm"
+            onClick={() => setIsAdding(!isAdding)}
+            className="bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-semibold h-9 px-3.5 gap-1.5 shadow-2xs"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            <span>Add Record</span>
+          </Button>
+        </div>
       </div>
 
-      {/* Horizontal Apple Health Category Selector Pills */}
-      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 text-xs select-none">
-        {[
-          { id: "all", label: "All Records" },
-          { id: "medication", label: "Meds" },
-          { id: "allergy", label: "Allergies" },
-          { id: "condition", label: "Conditions" },
-          { id: "lab", label: "Labs" },
-          { id: "surgery", label: "Procedures" },
-        ].map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setSelectedCategoryTab(tab.id)}
-            className={`px-3 py-1 rounded-full font-semibold transition-all whitespace-nowrap text-xs ${
-              selectedCategoryTab === tab.id
-                ? "bg-slate-900 text-white shadow-xs"
-                : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200/80"
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
+      {/* 2. Sleek Modern Tab Bar (No Pill Shapes) */}
+      <div className="flex items-center gap-6 border-b border-slate-200 overflow-x-auto no-scrollbar select-none pt-1">
+        {CATEGORY_TABS.map((tab) => {
+          const isActive = selectedCategoryTab === tab.id;
+          const count =
+            tab.id === "all" ? items.length : items.filter((i) => i.category === tab.id).length;
+
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setSelectedCategoryTab(tab.id)}
+              className={cn(
+                "pb-3 text-sm transition-all relative flex items-center gap-2 whitespace-nowrap",
+                isActive
+                  ? "text-teal-900 font-semibold"
+                  : "text-slate-500 hover:text-slate-800 font-medium"
+              )}
+            >
+              <span>{tab.label}</span>
+              <span
+                className={cn(
+                  "text-[11px] px-1.5 py-0.5 rounded font-mono font-medium",
+                  isActive
+                    ? "bg-teal-100 text-teal-800 font-bold"
+                    : "text-slate-400 bg-slate-100"
+                )}
+              >
+                {count}
+              </span>
+              {isActive && (
+                <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-teal-600 rounded-full" />
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* 3. Subtle Status Summary Strip (No Pill Badges) */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-slate-500 py-1">
+        <div className="flex items-center gap-3">
+          <span className="flex items-center gap-1.5 font-medium text-slate-700">
+            <span className="h-2 w-2 rounded-full bg-emerald-500" />
+            {confirmedCount} confirmed records
+          </span>
+          {unconfirmedCount > 0 && (
+            <>
+              <span className="text-slate-300">•</span>
+              <span className="flex items-center gap-1.5 text-amber-700 font-medium">
+                <span className="h-2 w-2 rounded-full bg-amber-500" />
+                {unconfirmedCount} awaiting your confirmation
+              </span>
+            </>
+          )}
+        </div>
+        <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
+          <Info className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+          <span>Only confirmed records sync to your Emergency Medical ID</span>
+        </div>
       </div>
 
       {/* Manual Entry Form */}
       {isAdding && (
-        <Card className="border-teal-200 bg-teal-50/20 shadow-sm">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-              <Plus className="h-4 w-4 text-teal-600" />
-              Add Patient-Entered Health Record
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleCreateManual} className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="sm:col-span-1">
-                  <label className="text-xs font-semibold text-gray-700 block mb-1">
-                    Category
-                  </label>
-                  <select
-                    value={newCategory}
-                    onChange={(e) => setNewCategory(e.target.value)}
-                    className="w-full text-sm border rounded-lg p-2 bg-white text-gray-800 focus:outline-none focus:ring-2 focus:ring-teal-500"
-                  >
-                    <option value="allergy">Allergy</option>
-                    <option value="medication">Medication</option>
-                    <option value="condition">Condition / Diagnosis</option>
-                    <option value="surgery">Surgery / Procedure</option>
-                    <option value="lab">Lab Result</option>
-                    <option value="implant">Implant / Device</option>
-                  </select>
-                </div>
-                <div className="sm:col-span-2">
-                  <label className="text-xs font-semibold text-gray-700 block mb-1">
-                    Description or Drug Name (with dose if known)
-                  </label>
-                  <Input
-                    placeholder="e.g. Metformin 500mg PO BID or Penicillin (Rash)"
-                    value={newValue}
-                    onChange={(e) => setNewValue(e.target.value)}
-                    className="bg-white"
-                  />
-                </div>
+        <div className="p-5 rounded-xl border border-teal-200 bg-teal-50/20 shadow-xs space-y-4">
+          <div className="flex items-center justify-between border-b border-teal-100 pb-2.5">
+            <h3 className="text-sm font-semibold text-slate-900">
+              Add Record Manually
+            </h3>
+            <button
+              onClick={() => setIsAdding(false)}
+              className="text-xs text-slate-400 hover:text-slate-600"
+            >
+              Cancel
+            </button>
+          </div>
+
+          <form onSubmit={handleCreateManual} className="space-y-3.5">
+            {addingError && (
+              <div className="p-2.5 rounded-lg bg-rose-50 border border-rose-200 text-xs text-rose-800">
+                {addingError}
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="text-xs font-semibold text-slate-700 block mb-1">
+                  Category
+                </label>
+                <select
+                  value={newCategory}
+                  onChange={(e) => setNewCategory(e.target.value)}
+                  className="w-full h-9 rounded-lg border border-slate-200 bg-white text-xs px-2.5 text-slate-800"
+                >
+                  <option value="medication">Medication</option>
+                  <option value="allergy">Allergy / Reaction</option>
+                  <option value="condition">Condition / Diagnosis</option>
+                  <option value="surgery">Procedure / Surgery</option>
+                  <option value="lab">Lab Result</option>
+                  <option value="implant">Implant / Device</option>
+                </select>
               </div>
 
-              {addingError && (
-                <p className="text-xs text-rose-600 font-medium">{addingError}</p>
-              )}
-
-              <div className="flex items-center justify-end gap-2 pt-1">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setIsAdding(false)}
-                  disabled={savingNew}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  size="sm"
-                  disabled={savingNew}
-                  className="bg-teal-600 hover:bg-teal-700 text-white"
-                >
-                  {savingNew ? (
-                    <>
-                      <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
-                      Saving...
-                    </>
-                  ) : (
-                    "Save to Summary"
-                  )}
-                </Button>
+              <div className="sm:col-span-2">
+                <label className="text-xs font-semibold text-slate-700 block mb-1">
+                  Description / Medication Name
+                </label>
+                <Input
+                  value={newValue}
+                  onChange={(e) => setNewValue(e.target.value)}
+                  placeholder="e.g. Telmisartan 40mg once daily or Penicillin allergy"
+                  className="h-9 text-xs bg-white"
+                />
               </div>
-            </form>
-          </CardContent>
-        </Card>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setIsAdding(false)}
+                className="h-8 text-xs text-slate-600"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                size="sm"
+                disabled={savingNew}
+                className="h-8 text-xs bg-teal-600 hover:bg-teal-700 text-white font-medium"
+              >
+                {savingNew ? "Saving..." : "Save Record"}
+              </Button>
+            </div>
+          </form>
+        </div>
       )}
 
-      {/* Safety Notice & Status Count Bar */}
-      <div className="bg-gray-50 border rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-gray-600">
-        <div className="flex items-center gap-2">
-          <Info className="h-4 w-4 text-teal-600 flex-shrink-0" />
-          <span>
-            <strong>Patient Confirmation Rule:</strong> Extracted items start as unconfirmed.
-            Only records confirmed by you appear on your Emergency Card.
-          </span>
-        </div>
-        <div className="flex items-center gap-2 self-end sm:self-auto font-mono text-[11px]">
-          <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-medium">
-            {confirmedCount} Confirmed
-          </span>
-          <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-800 font-medium">
-            {unconfirmedCount} Unconfirmed
-          </span>
-        </div>
-      </div>
-
       {error && (
-        <div className="bg-rose-50 border border-rose-200 text-rose-800 p-4 rounded-xl text-sm">
+        <div className="bg-rose-50 border border-rose-200 text-rose-800 p-4 rounded-xl text-xs">
           {error}
         </div>
       )}
 
-      {/* Clinical Sections */}
-      <div className="space-y-4">
+      {/* 4. Clinical Category Sections (Clean, Uncluttered Editorial List) */}
+      <div className="space-y-5">
         {Object.keys(CATEGORY_CONFIG)
           .filter(
             (categoryKey) =>
@@ -522,378 +536,374 @@ export function HealthSummaryView() {
             const Icon = config.icon;
 
             return (
-              <div key={categoryKey} className="apple-card overflow-hidden">
-                <div className="bg-slate-50/80 border-b border-slate-100 py-2.5 px-4 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className={`p-1 rounded-md border ${config.color}`}>
-                      <Icon className="h-3.5 w-3.5" />
+              <div
+                key={categoryKey}
+                className="bg-white rounded-xl border border-slate-200/90 shadow-2xs overflow-hidden"
+              >
+                {/* Clean Section Header */}
+                <div className="bg-slate-50/70 border-b border-slate-100 py-3 px-5 flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className={cn("p-1.5 rounded-lg border", config.color)}>
+                      <Icon className="h-4 w-4" />
                     </div>
-                    <h3 className="text-xs font-bold text-slate-800 tracking-tight">
+                    <h2 className="text-sm font-semibold text-slate-800">
                       {config.label}
-                    </h3>
+                    </h2>
                   </div>
-                  <span className="text-[10px] text-slate-400 font-mono font-medium">
-                    {categoryItems.length} {categoryItems.length === 1 ? "entry" : "entries"}
+                  <span className="text-xs text-slate-400 font-medium">
+                    {categoryItems.length} {categoryItems.length === 1 ? "record" : "records"}
                   </span>
                 </div>
 
-                <div className="p-0 divide-y divide-slate-100">
-                {categoryItems.length === 0 ? (
-                  <div className="py-6 px-5 text-sm text-gray-500 italic bg-white">
-                    {config.emptyText}
-                  </div>
-                ) : (
-                  categoryItems.map((item) => {
-                    const displayValue =
-                      item.category === "allergy"
-                        ? formatAllergyDisplay(item)
-                        : item.value;
+                {/* Items List */}
+                <div className="divide-y divide-slate-100">
+                  {categoryItems.length === 0 ? (
+                    <div className="py-7 px-5 text-xs text-slate-400 italic text-center">
+                      {config.emptyText}
+                    </div>
+                  ) : (
+                    categoryItems.map((item) => {
+                      const displayValue =
+                        item.category === "allergy"
+                          ? formatAllergyDisplay(item)
+                          : item.value;
+                      const isEditing = editingItem?.id === item.id;
+                      const purpose =
+                        item.category === "medication"
+                          ? getMedicationPurpose(item.value)
+                          : null;
 
-                    const isEditing = editingItem?.id === item.id;
+                      return (
+                        <div
+                          key={item.id}
+                          className={cn(
+                            "p-4 sm:p-5 transition-colors",
+                            item.status === "confirmed"
+                              ? "hover:bg-slate-50/40"
+                              : "bg-amber-50/15 hover:bg-amber-50/25"
+                          )}
+                        >
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="space-y-1.5 flex-1 min-w-0">
+                              {/* Status indicator: Clean text, zero pill shapes */}
+                              <div className="flex items-center gap-2.5 flex-wrap text-xs">
+                                {item.status === "confirmed" ? (
+                                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700">
+                                    <Check className="h-3 w-3 text-emerald-600" />
+                                    Confirmed
+                                  </span>
+                                ) : item.status === "needs_review" ? (
+                                  <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                                    <AlertTriangle className="h-3 w-3 text-amber-600" />
+                                    Needs Review
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-600 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                                    <Sparkles className="h-3 w-3 text-teal-600" />
+                                    Extracted from Scan
+                                  </span>
+                                )}
 
-                    return (
-                      <div
-                        key={item.id}
-                        className={`p-5 transition-colors ${
-                          item.status === "confirmed"
-                            ? "bg-white hover:bg-gray-50/50"
-                            : "bg-amber-50/20 hover:bg-amber-50/30"
-                        }`}
-                      >
-                        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-                          {/* Item Value & Verbatim Details */}
-                          <div className="space-y-1.5 flex-1 min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              {/* Status Badge */}
-                              {item.status === "confirmed" ? (
-                                <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border-emerald-200 text-[11px] px-2 py-0.5">
-                                  <Check className="h-3 w-3 mr-1" /> Confirmed
-                                </Badge>
-                              ) : item.status === "needs_review" ? (
-                                <Badge variant="review" className="text-[11px] px-2 py-0.5">
-                                  <AlertTriangle className="h-3 w-3 mr-1 text-amber-600" /> Needs Review
-                                </Badge>
-                              ) : (
-                                <Badge variant="secondary" className="text-[11px] px-2 py-0.5 text-gray-700 bg-gray-100">
-                                  <Sparkles className="h-3 w-3 mr-1 text-teal-600" /> Extracted (Unconfirmed)
-                                </Badge>
-                              )}
+                                {item.source === "patient_entered" && (
+                                  <span className="text-[11px] text-slate-400">
+                                    • {item.document ? "Edited by you" : "Added manually"}
+                                  </span>
+                                )}
 
-                              {/* Distinguish Edited vs Manual vs Document Items */}
-                              {item.source === "patient_entered" && item.document && (
-                                <Badge className="bg-blue-50 text-blue-700 border-blue-200 text-[10px]">
-                                  Edited by you
-                                </Badge>
-                              )}
-
-                              {item.source === "patient_entered" && !item.document && (
-                                <Badge className="bg-gray-100 text-gray-600 border-gray-200 text-[10px]">
-                                  Added by you, no document
-                                </Badge>
-                              )}
-
-                              {/* Second-Reader OCR Cross-Check Badges */}
-                              {(item.ocr_check?.state === "disagree" || (item.review_reason && item.review_reason.includes("OCR"))) && (
-                                <Badge className="bg-rose-100 text-rose-800 border-rose-200 text-[10px] px-2 py-0.5 font-medium">
-                                  <AlertTriangle className="h-3 w-3 mr-1 text-rose-600 inline" />
-                                  Second reading disagrees: {item.review_reason ? item.review_reason.replace(/^OCR disagreement:\s*/i, "") : "dose"}
-                                </Badge>
-                              )}
-
-                              {item.ocr_check?.state === "unavailable" && (
-                                <Badge variant="secondary" className="bg-slate-100 text-slate-700 border-slate-200 text-[10px] px-2 py-0.5">
-                                  Second reading unavailable
-                                </Badge>
-                              )}
-                            </div>
-
-                            {/* Main Display Value / Inline Edit */}
-                            {isEditing ? (
-                              <div className="pt-1 flex items-center gap-2">
-                                <Input
-                                  value={editingItem.value}
-                                  onChange={(e) =>
-                                    setEditingItem({ id: item.id, value: e.target.value })
-                                  }
-                                  className="h-8 text-sm bg-white"
-                                />
-                                <Button
-                                  size="sm"
-                                  onClick={handleSaveEdit}
-                                  disabled={savingEdit}
-                                  className="h-8 text-xs bg-teal-600 hover:bg-teal-700 text-white"
-                                >
-                                  {savingEdit ? <Loader2 className="h-3 w-3 animate-spin" /> : "Save"}
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => setEditingItem(null)}
-                                  disabled={savingEdit}
-                                  className="h-8 text-xs"
-                                >
-                                  Cancel
-                                </Button>
-                              </div>
-                            ) : (
-                              <div>
-                                <p className="text-base font-medium text-gray-900 leading-snug break-words">
-                                  {displayValue}
-                                </p>
-                                {item.category === "medication" && getMedicationPurpose(item.value) && (
-                                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-blue-50/90 border border-blue-200/80 text-[11px] text-blue-800 font-medium mt-1">
-                                    <Info className="h-3 w-3 text-blue-600 shrink-0" />
-                                    <span>Used for: {getMedicationPurpose(item.value)}</span>
-                                  </div>
+                                {(item.ocr_check?.state === "disagree" ||
+                                  (item.review_reason &&
+                                    item.review_reason.includes("OCR"))) && (
+                                  <span className="inline-flex items-center gap-1 text-[11px] text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
+                                    <AlertTriangle className="h-3 w-3 text-rose-600" />
+                                    Second reading disagrees:{" "}
+                                    {item.review_reason
+                                      ? item.review_reason.replace(/^OCR disagreement:\s*/i, "")
+                                      : "dose"}
+                                  </span>
                                 )}
                               </div>
-                            )}
 
-                            {/* Verbatim Supporting Quote */}
-                            {item.quote && !isEditing && (
-                              <div className="text-xs text-gray-700 bg-gray-50 rounded-lg p-2.5 border-l-2 border-teal-500 mt-2">
-                                <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 block mb-0.5">
-                                  {item.source === "patient_entered"
-                                    ? "Original Document Quote (prior to your edit):"
-                                    : "Verbatim Quote from Document:"}
-                                </span>
-                                <p className="italic font-serif text-gray-800">
-                                  &quot;{item.quote}&quot;
-                                </p>
-                              </div>
-                            )}
-
-                            {/* Multi-source quotes notice if merged */}
-                            {item.sources && item.sources.length > 1 && !isEditing && (
-                              <div className="text-[11px] text-muted-foreground mt-1">
-                                Supported by {item.sources.length} distinct verbatim mentions in document.
-                              </div>
-                            )}
-
-                            {/* Source Provenance Link & Dates */}
-                            <div className="flex items-center gap-2 text-xs text-muted-foreground pt-1 flex-wrap">
-                              {item.document ? (
-                                <Link
-                                  href={`/documents/${item.document.id}`}
-                                  className="text-teal-700 hover:underline font-medium inline-flex items-center gap-1"
-                                >
-                                  {item.document.doc_type || "Document"}
-                                  <ExternalLink className="h-3 w-3" />
-                                </Link>
+                              {/* Item Main Value */}
+                              {isEditing ? (
+                                <div className="pt-1 flex items-center gap-2">
+                                  <Input
+                                    value={editingItem.value}
+                                    onChange={(e) =>
+                                      setEditingItem({ id: item.id, value: e.target.value })
+                                    }
+                                    className="h-8 text-sm bg-white"
+                                  />
+                                  <Button
+                                    size="sm"
+                                    onClick={handleSaveEdit}
+                                    disabled={savingEdit}
+                                    className="h-8 text-xs bg-teal-600 hover:bg-teal-700 text-white"
+                                  >
+                                    {savingEdit ? <Loader2 className="h-3 w-3 animate-spin" /> : "Save"}
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => setEditingItem(null)}
+                                    disabled={savingEdit}
+                                    className="h-8 text-xs"
+                                  >
+                                    Cancel
+                                  </Button>
+                                </div>
                               ) : (
-                                <span>Direct Entry</span>
+                                <div className="pt-0.5">
+                                  <h3 className="text-base font-semibold text-slate-900 leading-snug">
+                                    {displayValue}
+                                  </h3>
+                                  {/* Purpose: subtle natural subtitle without pill box */}
+                                  {item.category === "medication" && purpose && (
+                                    <p className="text-xs text-slate-500 font-normal mt-0.5">
+                                      Used for: {purpose}
+                                    </p>
+                                  )}
+                                </div>
                               )}
 
-                              {item.page_no && (
-                                <span>• Page {item.page_no}</span>
+                              {/* Concise Provenance & Source Citation (Replaces giant grey box) */}
+                              {!isEditing && (
+                                <div className="pt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-400">
+                                  {item.quote && (
+                                    <span className="italic text-slate-600 font-normal">
+                                      &ldquo;{item.quote}&rdquo;
+                                    </span>
+                                  )}
+                                  {item.quote && <span>•</span>}
+                                  {item.document ? (
+                                    <Link
+                                      href={`/documents/${item.document.id}`}
+                                      className="text-teal-700 hover:underline font-medium inline-flex items-center gap-1"
+                                    >
+                                      <span>{item.document.doc_type || "Document"}</span>
+                                      {item.page_no && <span>(Page {item.page_no})</span>}
+                                      <ExternalLink className="h-3 w-3" />
+                                    </Link>
+                                  ) : (
+                                    <span>Direct Entry</span>
+                                  )}
+                                  {item.document?.doc_date && (
+                                    <>
+                                      <span>•</span>
+                                      <span>
+                                        {formatClinicalDate(item.document.doc_date)} (
+                                        {getDateAge(item.document.doc_date)})
+                                      </span>
+                                    </>
+                                  )}
+                                  {item.last_confirmed_at && (
+                                    <>
+                                      <span>•</span>
+                                      <span className="text-emerald-700">
+                                        Confirmed {formatClinicalDate(item.last_confirmed_at)}
+                                      </span>
+                                    </>
+                                  )}
+                                </div>
                               )}
 
-                              {item.document?.doc_date ? (
-                                <span>
-                                  • {item.document.doc_date_type === "signed" ? "Signed" : "Document Date"}:{" "}
-                                  <strong className="text-gray-700">
-                                    {formatClinicalDate(item.document.doc_date)}
-                                  </strong>{" "}
-                                  ({getDateAge(item.document.doc_date)})
-                                </span>
-                              ) : item.document ? (
-                                <span>• Document date: not set</span>
-                              ) : null}
+                              {/* Confirmation & Mismatch Actions for unconfirmed records */}
+                              {item.status !== "confirmed" &&
+                                !isEditing &&
+                                (() => {
+                                  const isIdentityMismatch =
+                                    item.review_reason ===
+                                      "Report appears to be for someone else" ||
+                                    (item.document?.identity_status === "mismatch" &&
+                                      item.document?.attestation_type !==
+                                        "same_person_override");
 
-                              {item.last_confirmed_at && (
-                                <span className="text-emerald-700">
-                                  • Confirmed {formatClinicalDate(item.last_confirmed_at)}
-                                </span>
-                              )}
-                            </div>
+                                  const isNameNotFoundUnattested =
+                                    item.document?.identity_status === "name_not_found" &&
+                                    !item.document?.attestation_timestamp;
 
-                            {/* Confirm Action Bar adjacent to Quote & Document Link */}
-                            {item.status !== "confirmed" && !isEditing && (() => {
-                              const isIdentityMismatch =
-                                item.review_reason === "Report appears to be for someone else" ||
-                                (item.document?.identity_status === "mismatch" &&
-                                  item.document?.attestation_type !== "same_person_override");
+                                  const isConfirmDisabled =
+                                    confirmingId === item.id ||
+                                    isIdentityMismatch ||
+                                    isNameNotFoundUnattested;
 
-                              const isNameNotFoundUnattested =
-                                item.document?.identity_status === "name_not_found" &&
-                                !item.document?.attestation_timestamp;
+                                  return (
+                                    <div className="mt-3 space-y-2 pt-2 border-t border-slate-100">
+                                      {isIdentityMismatch ? (
+                                        <div className="bg-rose-50 border border-rose-200 rounded-lg p-3 text-xs text-rose-900 space-y-2">
+                                          <div className="flex items-center gap-1.5 font-bold text-rose-800">
+                                            <AlertTriangle className="h-4 w-4 text-rose-600 flex-shrink-0" />
+                                            <span>
+                                              Patient Identity Mismatch: Report appears to be for
+                                              someone else
+                                            </span>
+                                          </div>
+                                          <p className="text-[11px] text-rose-700 leading-relaxed">
+                                            The patient name on this document differs from the
+                                            active profile. Confirmation is locked to prevent
+                                            record contamination.
+                                          </p>
+                                          <div className="flex items-center gap-2 pt-1 flex-wrap">
+                                            {(() => {
+                                              const matchingProfile = patients.find((p) => {
+                                                if (p.id === activePatientId) return false;
+                                                if (
+                                                  !item.document?.patient_name_as_printed &&
+                                                  !item.document?.patient_name_latin
+                                                )
+                                                  return false;
+                                                const check = matchPatientIdentity(
+                                                  { full_name: p.full_name, dob: p.dob },
+                                                  {
+                                                    patient_name_as_printed:
+                                                      item.document.patient_name_as_printed,
+                                                    patient_name_latin:
+                                                      item.document.patient_name_latin,
+                                                    patient_dob: item.document.patient_dob,
+                                                  }
+                                                );
+                                                return check.outcome === "match";
+                                              });
 
-                              const isConfirmDisabled =
-                                confirmingId === item.id ||
-                                isIdentityMismatch ||
-                                isNameNotFoundUnattested;
+                                              if (!matchingProfile || !item.document?.id)
+                                                return null;
 
-                              return (
-                                <div className="mt-3 space-y-2">
-                                  {isIdentityMismatch ? (
-                                    <div className="bg-rose-50 border border-rose-200 rounded-lg p-3 text-xs text-rose-900 space-y-2">
-                                      <div className="flex items-center gap-1.5 font-bold text-rose-800">
-                                        <AlertTriangle className="h-4 w-4 text-rose-600 flex-shrink-0" />
-                                        <span>Patient Identity Mismatch: Report appears to be for someone else</span>
-                                      </div>
-                                      <p className="text-[11px] text-rose-700 leading-relaxed">
-                                        The patient name on this document differs from the active profile. Confirmation is locked to prevent medical record contamination. Choose an action:
-                                      </p>
-                                      <div className="flex items-center gap-2 pt-1 flex-wrap">
-                                        {/* Requirement B.5: "Move to <profile>" if printed name matches another profile in same account */}
-                                        {(() => {
-                                          const matchingProfile = patients.find((p) => {
-                                            if (p.id === activePatientId) return false;
-                                            if (!item.document?.patient_name_as_printed && !item.document?.patient_name_latin) return false;
-                                            const check = matchPatientIdentity(
-                                              { full_name: p.full_name, dob: p.dob },
-                                              {
-                                                patient_name_as_printed: item.document.patient_name_as_printed,
-                                                patient_name_latin: item.document.patient_name_latin,
-                                                patient_dob: item.document.patient_dob,
-                                              }
-                                            );
-                                            return check.outcome === "match";
-                                          });
+                                              return (
+                                                <Button
+                                                  size="sm"
+                                                  variant="outline"
+                                                  disabled={movingDocId === item.document.id}
+                                                  onClick={() =>
+                                                    handleMoveDocument(
+                                                      item.document!.id,
+                                                      matchingProfile.id
+                                                    )
+                                                  }
+                                                  className="h-7 text-xs bg-teal-50 text-teal-800 border-teal-300 hover:bg-teal-100 font-semibold gap-1.5"
+                                                >
+                                                  {movingDocId === item.document.id ? (
+                                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                                  ) : (
+                                                    <Users className="h-3 w-3 text-teal-600" />
+                                                  )}
+                                                  <span>
+                                                    Move to {matchingProfile.full_name} (
+                                                    {matchingProfile.relationship_label})
+                                                  </span>
+                                                </Button>
+                                              );
+                                            })()}
 
-                                          if (!matchingProfile || !item.document?.id) return null;
-
-                                          return (
+                                            {item.document?.id && (
+                                              <Button
+                                                size="sm"
+                                                variant="outline"
+                                                disabled={attestingDocId === item.document.id}
+                                                onClick={() =>
+                                                  handleAttest(item.document!.id, "same_person")
+                                                }
+                                                className="h-7 text-xs bg-white text-rose-900 border-rose-300 hover:bg-rose-100 font-semibold"
+                                              >
+                                                Confirm Same Person
+                                              </Button>
+                                            )}
+                                          </div>
+                                        </div>
+                                      ) : isNameNotFoundUnattested ? (
+                                        <div className="bg-amber-50 border border-amber-200 rounded-lg p-2.5 text-xs text-amber-900 space-y-1.5">
+                                          <div className="flex items-center gap-1.5 font-bold text-amber-800">
+                                            <Info className="h-4 w-4 text-amber-600 flex-shrink-0" />
+                                            <span>Patient Name Not Detected on Report</span>
+                                          </div>
+                                          <p className="text-[11px] text-amber-800">
+                                            Please attest this document belongs to this patient
+                                            before confirming.
+                                          </p>
+                                          {item.document?.id && (
                                             <Button
                                               size="sm"
                                               variant="outline"
-                                              disabled={movingDocId === item.document.id}
-                                              onClick={() => handleMoveDocument(item.document!.id, matchingProfile.id)}
-                                              className="h-7 text-xs bg-teal-50 text-teal-800 border-teal-300 hover:bg-teal-100 font-semibold gap-1.5"
+                                              disabled={attestingDocId === item.document.id}
+                                              onClick={() =>
+                                                handleAttest(
+                                                  item.document!.id,
+                                                  "attest_name_not_found"
+                                                )
+                                              }
+                                              className="h-7 text-xs bg-white text-amber-900 border-amber-300 hover:bg-amber-100 font-semibold"
                                             >
-                                              {movingDocId === item.document.id ? (
-                                                <Loader2 className="h-3 w-3 animate-spin" />
-                                              ) : (
-                                                <Users className="h-3 w-3 text-teal-600" />
-                                              )}
-                                              <span>Move to {matchingProfile.full_name} ({matchingProfile.relationship_label})</span>
+                                              Attest Document
                                             </Button>
-                                          );
-                                        })()}
+                                          )}
+                                        </div>
+                                      ) : null}
 
-                                        {item.document?.id && (
-                                          <Button
-                                            size="sm"
-                                            variant="outline"
-                                            disabled={attestingDocId === item.document.id}
-                                            onClick={() => handleAttest(item.document!.id, "same_person")}
-                                            className="h-7 text-xs bg-white text-rose-900 border-rose-300 hover:bg-rose-100 font-semibold"
-                                          >
-                                            Confirm Same Person (e.g. Typo)
-                                          </Button>
-                                        )}
+                                      <div className="flex items-center justify-between gap-3 pt-1">
+                                        <span className="text-[11px] text-slate-500">
+                                          Verify against your physical prescription or scan
+                                        </span>
                                         <Button
                                           size="sm"
-                                          variant="outline"
-                                          disabled={deletingId === item.id}
-                                          onClick={() => handleDelete(item.id)}
-                                          className="h-7 text-xs bg-white text-gray-700 border-gray-300 hover:bg-gray-100"
+                                          disabled={isConfirmDisabled}
+                                          onClick={() => handleConfirm(item.id)}
+                                          className={`text-white text-xs h-7 px-3 font-semibold shadow-2xs rounded-md ${
+                                            isConfirmDisabled
+                                              ? "bg-slate-300 cursor-not-allowed opacity-60"
+                                              : "bg-emerald-600 hover:bg-emerald-700"
+                                          }`}
                                         >
-                                          Delete Record
+                                          {confirmingId === item.id ? (
+                                            <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                                          ) : (
+                                            <Check className="h-3 w-3 mr-1" />
+                                          )}
+                                          {isIdentityMismatch
+                                            ? "Confirm Locked"
+                                            : "Confirm Record"}
                                         </Button>
                                       </div>
                                     </div>
-                                  ) : isNameNotFoundUnattested ? (
-                                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-900 space-y-2">
-                                      <div className="flex items-center gap-1.5 font-bold text-amber-800">
-                                        <Info className="h-4 w-4 text-amber-600 flex-shrink-0" />
-                                        <span>Patient Name Not Detected on Report</span>
-                                      </div>
-                                      <p className="text-[11px] text-amber-800 leading-relaxed">
-                                        No patient name was found on this document. You must attest that this document belongs to this patient before confirming records.
-                                      </p>
-                                      {item.document?.id && (
-                                        <Button
-                                          size="sm"
-                                          variant="outline"
-                                          disabled={attestingDocId === item.document.id}
-                                          onClick={() => handleAttest(item.document!.id, "attest_name_not_found")}
-                                          className="h-7 text-xs bg-white text-amber-900 border-amber-300 hover:bg-amber-100 font-semibold"
-                                        >
-                                          Attest This Document
-                                        </Button>
-                                      )}
-                                    </div>
-                                  ) : item.review_reason ? (
-                                    <div className="bg-rose-50 border border-rose-200 rounded-lg p-2.5 text-xs text-rose-900 space-y-1">
-                                      <div className="flex items-center gap-1.5 font-semibold text-rose-800">
-                                        <AlertTriangle className="h-3.5 w-3.5 text-rose-600 flex-shrink-0" />
-                                        <span>Second Reader Flag: {item.review_reason}</span>
-                                      </div>
-                                      <p className="text-[11px] text-rose-700 leading-normal">
-                                        Independent second reading found conflicting text on this page. Carefully inspect your document scan before confirming.
-                                      </p>
-                                    </div>
-                                  ) : null}
+                                  );
+                                })()}
+                            </div>
 
-                                  <div className="pt-2.5 border-t border-amber-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-amber-50/40 p-2.5 rounded-lg border border-amber-200/60">
-                                    <div className="text-[11px] text-amber-900 flex items-center gap-1.5">
-                                      <Info className="h-3.5 w-3.5 text-amber-600 flex-shrink-0" />
-                                      <span>Compare quote against {item.page_no ? `Page ${item.page_no}` : "your scan"} before confirming.</span>
-                                    </div>
-                                    <Button
-                                      size="sm"
-                                      disabled={isConfirmDisabled}
-                                      onClick={() => handleConfirm(item.id)}
-                                      className={`text-white text-xs h-8 px-3 font-medium shadow-sm flex-shrink-0 ${
-                                        isConfirmDisabled
-                                          ? "bg-gray-400 cursor-not-allowed opacity-60"
-                                          : "bg-emerald-600 hover:bg-emerald-700"
-                                      }`}
-                                    >
-                                      {confirmingId === item.id ? (
-                                        <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
-                                      ) : (
-                                        <Check className="h-3.5 w-3.5 mr-1.5" />
-                                      )}
-                                      {isIdentityMismatch
-                                        ? "Confirm Disabled (Mismatch)"
-                                        : isNameNotFoundUnattested
-                                        ? "Attestation Required"
-                                        : "I checked this against my document"}
-                                    </Button>
-                                  </div>
-                                </div>
-                              );
-                            })()}
-                          </div>
+                            {/* Unobtrusive Actions (Edit & Delete) */}
+                            <div className="flex items-center gap-0.5 shrink-0 pt-0.5">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() =>
+                                  setEditingItem({ id: item.id, value: item.value })
+                                }
+                                className="h-7 w-7 p-0 text-slate-400 hover:text-slate-700 rounded-md"
+                                title="Edit item"
+                              >
+                                <Edit2 className="h-3.5 w-3.5" />
+                              </Button>
 
-                          {/* Action Buttons: Edit, Remove */}
-                          <div className="flex items-center gap-1 self-end sm:self-start pt-1">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => setEditingItem({ id: item.id, value: item.value })}
-                              className="h-8 w-8 p-0 text-gray-500 hover:text-gray-900"
-                              title="Edit item"
-                            >
-                              <Edit2 className="h-3.5 w-3.5" />
-                            </Button>
-
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              disabled={deletingId === item.id}
-                              onClick={() => handleDelete(item.id)}
-                              className="h-8 w-8 p-0 text-rose-500 hover:text-rose-700 hover:bg-rose-50"
-                              title="Remove item"
-                            >
-                              {deletingId === item.id ? (
-                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                              ) : (
-                                <Trash2 className="h-3.5 w-3.5" />
-                              )}
-                            </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                disabled={deletingId === item.id}
+                                onClick={() => handleDelete(item.id)}
+                                className="h-7 w-7 p-0 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md"
+                                title="Remove item"
+                              >
+                                {deletingId === item.id ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                )}
+                              </Button>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    );
-                  })
-                )}
+                      );
+                    })
+                  )}
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
       </div>
     </div>
   );
