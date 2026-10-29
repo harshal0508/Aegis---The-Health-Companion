@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import Link from "next/link";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -19,17 +20,45 @@ export default async function DocumentsPage() {
 
   if (!user) redirect("/login");
 
-  // Fetch documents for the authenticated user, newest first
+  // Read active patient ID from cookie, fallback to self patient
+  const cookieStore = await cookies();
+  const activePatientCookie = cookieStore.get("medanchor_active_patient_id")?.value;
+
+  let activePatient = null;
+  if (activePatientCookie) {
+    const { data: p } = await supabase
+      .from("patients")
+      .select("id, full_name, relationship_label, is_self")
+      .eq("id", activePatientCookie)
+      .eq("account_id", user.id)
+      .maybeSingle();
+    activePatient = p;
+  }
+
+  if (!activePatient) {
+    const { data: selfPatient } = await supabase
+      .from("patients")
+      .select("id, full_name, relationship_label, is_self")
+      .eq("account_id", user.id)
+      .eq("is_self", true)
+      .maybeSingle();
+    activePatient = selfPatient;
+  }
+
+  const patientId = activePatient?.id || user.id;
+
+  // Fetch documents for the active patient profile, newest first
   const { data: documents } = await supabase
     .from("documents")
-    .select("id, user_id, storage_path, doc_type, doc_date, status, page_count, created_at")
-    .eq("user_id", user.id)
+    .select("id, user_id, patient_id, storage_path, doc_type, doc_date, status, page_count, created_at")
+    .eq("patient_id", patientId)
     .order("doc_date", { ascending: false, nullsFirst: false })
     .order("created_at", { ascending: false });
 
   const typedDocs: DocumentSummary[] = (documents || []).map((d) => ({
     id: d.id,
     user_id: d.user_id,
+    patient_id: d.patient_id,
     storage_path: d.storage_path,
     doc_type: d.doc_type || "other",
     doc_date: d.doc_date,

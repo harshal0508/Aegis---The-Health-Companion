@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from "react";
+import { useRouter } from "next/navigation";
 
 export interface PatientProfile {
   id: string;
@@ -43,6 +44,7 @@ const PatientContext = createContext<PatientContextType | undefined>(undefined);
 const STORAGE_KEY = "medanchor_active_patient_id";
 
 export function PatientProvider({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
   const [patients, setPatients] = useState<PatientProfile[]>([]);
   const [activePatientId, setActivePatientIdState] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -65,12 +67,16 @@ export function PatientProvider({ children }: { children: React.ReactNode }) {
       const storedId = typeof window !== "undefined" ? localStorage.getItem(STORAGE_KEY) : null;
       if (storedId && list.some((p) => p.id === storedId)) {
         setActivePatientIdState(storedId);
+        if (typeof window !== "undefined") {
+          document.cookie = `medanchor_active_patient_id=${storedId}; path=/; max-age=31536000; SameSite=Lax`;
+        }
       } else {
         const selfPatient = list.find((p) => p.is_self) || list[0] || null;
         if (selfPatient) {
           setActivePatientIdState(selfPatient.id);
           if (typeof window !== "undefined") {
             localStorage.setItem(STORAGE_KEY, selfPatient.id);
+            document.cookie = `medanchor_active_patient_id=${selfPatient.id}; path=/; max-age=31536000; SameSite=Lax`;
           }
         }
       }
@@ -86,12 +92,17 @@ export function PatientProvider({ children }: { children: React.ReactNode }) {
     refreshPatients();
   }, [refreshPatients]);
 
-  const setActivePatientId = useCallback((id: string) => {
-    setActivePatientIdState(id);
-    if (typeof window !== "undefined") {
-      localStorage.setItem(STORAGE_KEY, id);
-    }
-  }, []);
+  const setActivePatientId = useCallback(
+    (id: string) => {
+      setActivePatientIdState(id);
+      if (typeof window !== "undefined") {
+        localStorage.setItem(STORAGE_KEY, id);
+        document.cookie = `medanchor_active_patient_id=${id}; path=/; max-age=31536000; SameSite=Lax`;
+      }
+      router.refresh();
+    },
+    [router]
+  );
 
   const addPatient = useCallback(
     async (payload: AddPatientPayload): Promise<PatientProfile> => {

@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import Link from "next/link";
 import {
   Plus,
@@ -32,44 +33,90 @@ export default async function HomePage() {
 
   if (!user) redirect("/login");
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("full_name, blood_group, emergency_contact_name, emergency_contact_phone")
-    .single();
+  // Read active patient ID from cookie, fallback to self patient
+  const cookieStore = await cookies();
+  const activePatientCookie = cookieStore.get("medanchor_active_patient_id")?.value;
 
-  if (!profile) redirect("/onboarding");
+  let activePatient = null;
+  if (activePatientCookie) {
+    const { data: p } = await supabase
+      .from("patients")
+      .select("id, full_name, blood_group, emergency_contact_name, emergency_contact_phone, relationship_label, is_self")
+      .eq("id", activePatientCookie)
+      .eq("account_id", user.id)
+      .maybeSingle();
+    activePatient = p;
+  }
 
-  // Fetch recent documents
+  // Fallback to self patient
+  if (!activePatient) {
+    const { data: selfPatient } = await supabase
+      .from("patients")
+      .select("id, full_name, blood_group, emergency_contact_name, emergency_contact_phone, relationship_label, is_self")
+      .eq("account_id", user.id)
+      .eq("is_self", true)
+      .maybeSingle();
+    activePatient = selfPatient;
+  }
+
+  // Fallback to profiles table if patients table not populated
+  if (!activePatient) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("full_name, blood_group, emergency_contact_name, emergency_contact_phone")
+      .single();
+    if (!profile) redirect("/onboarding");
+    activePatient = {
+      id: user.id,
+      full_name: profile.full_name,
+      blood_group: profile.blood_group,
+      emergency_contact_name: profile.emergency_contact_name,
+      emergency_contact_phone: profile.emergency_contact_phone,
+      relationship_label: "Self",
+      is_self: true,
+    };
+  }
+
+  // Fetch recent documents for active patient
   const { data: recentDocs } = await supabase
     .from("documents")
-    .select("id, doc_type, doc_date, status, page_count, created_at")
-    .eq("user_id", user.id)
+    .select("id, patient_id, doc_type, doc_date, status, page_count, created_at")
+    .eq("patient_id", activePatient.id)
     .order("created_at", { ascending: false })
     .limit(4);
 
-  // Fetch critical items counts for Emergency Readiness & Health Rings
+  // Fetch critical items counts for Emergency Readiness for active patient
   const { data: confirmedItems } = await supabase
     .from("items")
-    .select("id, category, value")
-    .eq("user_id", user.id)
+    .select("id, category, value, patient_id")
+    .eq("patient_id", activePatient.id)
     .eq("status", "confirmed");
 
   const medsCount = (confirmedItems || []).filter((i) => i.category === "medication").length;
   const allergiesCount = (confirmedItems || []).filter((i) => i.category === "allergy").length;
   const conditionsCount = (confirmedItems || []).filter((i) => i.category === "condition").length;
 
-  const firstName = profile.full_name ? profile.full_name.split(" ")[0] : "Patient";
+  const firstName = activePatient.full_name ? activePatient.full_name.split(" ")[0] : "Patient";
 
   return (
     <div className="space-y-6">
       {/* Clean Greeting Header (Editorial Serif Style) */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl sm:text-4xl font-serif font-normal text-slate-900 tracking-tight">
-            Good evening, {firstName}
-          </h1>
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-3xl sm:text-4xl font-serif font-normal text-slate-900 tracking-tight">
+              Good evening, {firstName}
+            </h1>
+            {!activePatient.is_self && (
+              <Badge variant="outline" className="text-xs bg-teal-50 text-teal-800 border-teal-200">
+                {activePatient.relationship_label}
+              </Badge>
+            )}
+          </div>
           <p className="text-xs sm:text-sm text-slate-500 font-normal mt-1">
-            Your patient-owned health records and emergency readiness
+            {activePatient.is_self
+              ? "Your patient-owned health records and emergency readiness"
+              : `Managing health records and emergency readiness for ${activePatient.full_name}`}
           </p>
         </div>
 
@@ -305,13 +352,15 @@ export default async function HomePage() {
             <div className="h-10 w-10 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-2">
               <FileText className="h-5 w-5" />
             </div>
-            <p className="text-xs text-slate-500 font-medium">No documents uploaded yet</p>
+            <p className="text-xs text-slate-500 font-medium">
+              No documents uploaded for {activePatient.full_name} yet
+            </p>
             <Link
               href="/documents/upload"
               className="mt-2 inline-flex items-center gap-1 text-xs text-teal-700 font-semibold hover:underline"
             >
               <Plus className="h-3.5 w-3.5" />
-              Upload your first scan
+              Upload first scan for {activePatient.full_name.split(" ")[0]}
             </Link>
           </div>
         ) : (

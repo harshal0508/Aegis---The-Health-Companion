@@ -20,10 +20,12 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { formatClinicalDate } from "@/lib/utils";
+import { usePatient } from "@/components/patient/PatientContext";
 
 export interface DocumentSummary {
   id: string;
   user_id: string;
+  patient_id?: string;
   storage_path: string;
   doc_type: string;
   doc_date: string | null;
@@ -73,6 +75,7 @@ export function DocumentsList({
 }: {
   initialDocuments: DocumentSummary[];
 }) {
+  const { activePatient, activePatientId } = usePatient();
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
 
@@ -86,7 +89,12 @@ export function DocumentsList({
     { id: "other", label: "Other" },
   ];
 
-  const filteredDocs = initialDocuments.filter((doc) => {
+  // Filter documents by active patient profile
+  const patientDocs = activePatientId
+    ? initialDocuments.filter((doc) => !doc.patient_id || doc.patient_id === activePatientId)
+    : initialDocuments;
+
+  const filteredDocs = patientDocs.filter((doc) => {
     const matchesCategory =
       selectedCategory === "all" || doc.doc_type === selectedCategory;
 
@@ -110,7 +118,7 @@ export function DocumentsList({
   return (
     <div className="space-y-6">
       {/* Search and Filters */}
-      {initialDocuments.length > 0 && (
+      {patientDocs.length > 0 && (
         <div className="space-y-3">
           <div className="relative">
             <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
@@ -143,29 +151,43 @@ export function DocumentsList({
       )}
 
       {/* Document List */}
-      {filteredDocs.length === 0 ? (
-        <div className="apple-card p-8 text-center space-y-4">
+      {patientDocs.length === 0 ? (
+        <div className="apple-card p-10 text-center space-y-4">
           <div className="h-12 w-12 rounded-full bg-teal-50 text-teal-600 flex items-center justify-center mx-auto">
             <FileText className="h-6 w-6" />
           </div>
           <div className="max-w-sm mx-auto">
-            <h2 className="text-base font-bold text-slate-900">
-              {initialDocuments.length === 0
-                ? "No medical documents yet"
-                : "No matching records found"}
+            <h2 className="text-base font-serif font-bold text-slate-900">
+              No documents for {activePatient?.full_name || "this profile"}
             </h2>
             <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-              {initialDocuments.length === 0
-                ? "Upload discharge summaries, lab tests, prescriptions, and scans to keep your health records organized."
-                : "Try adjusting your filter or search keywords."}
+              Upload discharge summaries, lab tests, prescriptions, and scans specifically for {activePatient?.full_name || "this profile"}.
             </p>
           </div>
           <Link href="/documents/upload" className="inline-block">
             <Button size="sm" className="bg-teal-600 hover:bg-teal-700 text-white gap-1.5 rounded-full text-xs font-semibold px-4 shadow-xs">
               <Upload className="h-3.5 w-3.5" />
-              Upload Document
+              Upload Record
             </Button>
           </Link>
+        </div>
+      ) : filteredDocs.length === 0 ? (
+        <div className="apple-card p-8 text-center space-y-3">
+          <FileText className="h-10 w-10 text-slate-300 mx-auto" />
+          <p className="text-xs font-semibold text-slate-700">
+            No matching documents found in this filter
+          </p>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setSelectedCategory("all");
+              setSearchQuery("");
+            }}
+            className="text-xs text-teal-700 hover:text-teal-800"
+          >
+            Clear filters
+          </Button>
         </div>
       ) : (
         <div className="space-y-3">
