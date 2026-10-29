@@ -487,15 +487,15 @@ export function EmergencyCardManager() {
                 <div className="flex items-center gap-2 text-amber-900">
                   <AlertTriangle className="h-5 w-5 text-amber-600" />
                   <CardTitle className="text-base font-bold">
-                    Secure Emergency Link Created (Shown Once)
+                    Save Your Emergency Card (Shown Once)
                   </CardTitle>
                 </div>
                 <div className="text-xs text-amber-900 leading-relaxed space-y-1 mt-1">
                   <p>
-                    <strong>Save or Download Now:</strong> For security, only a cryptographic SHA-256 hash of your token is stored in our database. Once you leave this page, the raw link and QR code cannot be retrieved or shown again.
+                    <strong>Save or Download Now:</strong> To protect your privacy, this emergency link and QR code are only shown once. Please save the link or download your card before leaving this page.
                   </p>
                   <p className="text-[11px] text-amber-800">
-                    If you lose this link, re-showing the QR code requires <strong>regenerating</strong> the card, which immediately and permanently invalidates this link.
+                    If you ever misplace it, you can safely generate a new card anytime with the <strong>Regenerate Link</strong> button above.
                   </p>
                 </div>
               </CardHeader>
