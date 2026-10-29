@@ -19,7 +19,6 @@ const NAV_LINKS = [
   { href: "/summary", label: "Health Summary", icon: FileText },
   { href: "/advisories", label: "Alerts", icon: Bell },
   { href: "/documents", label: "Documents", icon: FolderOpen },
-  { href: "/emergency", label: "Emergency Card", icon: ShieldAlert },
 ] as const;
 
 export function AppHeader() {
