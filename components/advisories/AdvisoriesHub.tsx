@@ -22,6 +22,7 @@ interface DistrictNewsArticle {
   title: string;
   source: string;
   url: string;
+  image?: string | null;
   publishedAt: string;
   snippet: string;
   district: string;
@@ -302,9 +303,26 @@ export function AdvisoriesHub({ initialLocality }: AdvisoriesHubProps) {
                 return (
                   <div
                     key={article.id}
-                    className="apple-card apple-card-hover p-5 border-t-4 border-t-amber-500 flex flex-col justify-between space-y-3 shadow-2xs"
+                    className="apple-card apple-card-hover p-5 border-t-4 border-t-amber-500 flex flex-col justify-between space-y-3 shadow-2xs group"
                   >
-                    <div className="space-y-2.5">
+                    <div className="space-y-3">
+                      {/* Optional Real News Photo / Cover */}
+                      {article.image && (
+                        <div className="relative w-full h-44 rounded-xl overflow-hidden bg-slate-100 shadow-2xs">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={article.image}
+                            alt={article.title}
+                            className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-300"
+                            loading="lazy"
+                            onError={(e) => {
+                              const parent = (e.currentTarget as HTMLElement).parentElement;
+                              if (parent) parent.style.display = "none";
+                            }}
+                          />
+                        </div>
+                      )}
+
                       {/* Editorial Publisher Monogram & Human Formatted Date */}
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2 min-w-0">

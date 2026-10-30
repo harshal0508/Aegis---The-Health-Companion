@@ -11,6 +11,7 @@ export interface DistrictNewsArticle {
   title: string;
   source: string;
   url: string;
+  image?: string | null;
   publishedAt: string;
   snippet: string;
   district: string;
@@ -25,15 +26,24 @@ const IRRELEVANT_CIVIC_REGEX =
   /\b(snake|animal|leopard|dog|accident|crash|police|murder|theft|scam|corruption|brick|tender|stretcher|bribe|fire|arrest|fraud|protest|assault|dowry|bandage\s+row|traffic|cricket|ipl|movie|film|box\s+office|election|vote|rally|bjp|congress|aap|rape|gang-rape|sexual|burglary|liquor|fir|robbery|shopping|retail|market|bazaar|trader|traders|sales|diwali|festival|fare|fares|ticket|tickets|travel|train|flight|bus|admission|admissions|cat\b|iim\b|iit\b|exam|exams|college|student|students|university|school\s+admission|gold|silver|stock|share\s+price|sensex|nifty)\b/i;
 
 /**
- * Fetch and parse real news articles for a specific district and disease query.
- * Restricts queries to the last 30 days (`when:30d`) so results reflect the active month.
+ * Fetch verified district health news via GNews API (if GNEWS_API_KEY is configured),
+ * or fall back cleanly to the Google News RSS feed.
  */
 export async function fetchLiveDistrictHealthNews(
   district: string
 ): Promise<DistrictNewsArticle[]> {
+  const cleanDistrict = (district || "Indore").trim();
+  const gnewsKey = process.env.GNEWS_API_KEY;
+
+  if (gnewsKey) {
+    const gnewsArticles = await fetchGNewsDistrictHealth(cleanDistrict, gnewsKey);
+    if (gnewsArticles && gnewsArticles.length > 0) {
+      return gnewsArticles;
+    }
+  }
+
+  // Fallback to Google News RSS
   try {
-    const cleanDistrict = (district || "Indore").trim();
-    // Compact query string to ensure Google News respects the when:30d operator
     const query = encodeURIComponent(
       `"${cleanDistrict}" (outbreak OR epidemic OR surge OR dengue OR malaria OR fever OR cholera OR typhoid OR infection OR contamination OR health) when:30d`
     );
@@ -56,6 +66,86 @@ export async function fetchLiveDistrictHealthNews(
     return parseGoogleNewsRss(xmlText, cleanDistrict);
   } catch (err) {
     console.error("[NewsScanner] Error fetching live district news:", err);
+    return [];
+  }
+}
+
+/**
+ * Query official GNews REST API for structured, verified disease and health reports.
+ * Employs category=health, country=in, and strict calendar-month filtering.
+ */
+export async function fetchGNewsDistrictHealth(
+  district: string,
+  apiKey: string
+): Promise<DistrictNewsArticle[]> {
+  try {
+    const cleanDistrict = (district || "Indore").trim();
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = String(now.getMonth() + 1).padStart(2, "0");
+    const startOfMonth = `${currentYear}-${currentMonth}-01`;
+    const todayStr = now.toISOString().split("T")[0];
+    const fromDate = `${startOfMonth}T00:00:00Z`;
+    const toDate = now.toISOString();
+
+    const query = `"${cleanDistrict}" AND (outbreak OR epidemic OR cases OR infection OR fever OR dengue OR malaria OR alert OR health OR illness OR contamination)`;
+    const url = `https://gnews.io/api/v4/search?q=${encodeURIComponent(
+      query
+    )}&category=health&lang=en&country=in&max=10&from=${encodeURIComponent(
+      fromDate
+    )}&to=${encodeURIComponent(toDate)}&apikey=${apiKey}`;
+
+    const res = await fetch(url, {
+      headers: {
+        Accept: "application/json",
+      },
+      cache: "no-store",
+    });
+
+    if (!res.ok) {
+      console.warn(`[GNews] Request failed with status ${res.status}`);
+      return [];
+    }
+
+    const data = await res.json();
+    if (!data.articles || !Array.isArray(data.articles)) {
+      return [];
+    }
+
+    const results: DistrictNewsArticle[] = [];
+
+    for (let idx = 0; idx < data.articles.length; idx++) {
+      const art = data.articles[idx];
+      const title = (art.title || "").trim();
+      if (!title || IRRELEVANT_CIVIC_REGEX.test(title)) continue;
+
+      const pubDate = art.publishedAt
+        ? new Date(art.publishedAt).toISOString().split("T")[0]
+        : todayStr;
+
+      // Strictly enforce active month
+      if (pubDate < startOfMonth || pubDate > todayStr) continue;
+
+      results.push({
+        id: `gnews-${idx}-${Buffer.from(title.slice(0, 15)).toString("hex")}`,
+        title: decodeXmlEntities(title),
+        source: art.source?.name ? decodeXmlEntities(art.source.name) : "Regional Media",
+        url: art.url || "#",
+        image: art.image || null,
+        publishedAt: pubDate,
+        snippet: art.description ? decodeXmlEntities(art.description) : "Regional health press report.",
+        district: cleanDistrict,
+      });
+    }
+
+    // Sort decreasing by publishedAt
+    results.sort(
+      (a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
+    );
+
+    return results;
+  } catch (err) {
+    console.error("[GNews] Error querying GNews API:", err);
     return [];
   }
 }
