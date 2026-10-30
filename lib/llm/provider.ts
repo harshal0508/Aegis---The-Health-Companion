@@ -15,7 +15,6 @@ export interface ExtractedItem {
   page_no: number;
   quote: string; // exact text from the page — verified against OCR before saving
   confidence: number; // 0–1
-  box_2d?: [number, number, number, number]; // [ymin, xmin, ymax, xmax] 0-1000 scale
   normalization_source?: "none" | "brand_table" | "rxnorm" | "llm_inferred";
   normalized_value?: string; // only present if normalization_source !== 'none'
 }

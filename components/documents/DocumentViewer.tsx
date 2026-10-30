@@ -29,7 +29,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatClinicalDate } from "@/lib/utils";
 import { isNegativeAllergy } from "@/lib/emergency/sanitizer";
-import { PdfPageViewer } from "@/components/documents/PdfPageViewer";
 
 interface PageData {
   id: string;
@@ -76,6 +75,51 @@ const TYPE_LABELS: Record<string, string> = {
   bill: "Medical Bill",
   other: "Medical Document",
 };
+
+function renderHighlightedTranscript(text: string, quote: string | null) {
+  if (!quote || !quote.trim()) return text;
+  const q = quote.trim();
+  const lowerText = text.toLowerCase();
+  const lowerQ = q.toLowerCase();
+  const idx = lowerText.indexOf(lowerQ);
+
+  if (idx !== -1) {
+    const before = text.slice(0, idx);
+    const match = text.slice(idx, idx + q.length);
+    const after = text.slice(idx + q.length);
+    return (
+      <>
+        {before}
+        <mark className="bg-amber-300 text-amber-950 font-bold px-1.5 py-0.5 rounded ring-2 ring-amber-400">
+          {match}
+        </mark>
+        {after}
+      </>
+    );
+  }
+
+  // Fallback: match first 3 words if multi-line whitespace/newlines differ
+  const words = q.split(/\s+/).slice(0, 3).join(" ");
+  if (words.length >= 3) {
+    const wordIdx = lowerText.indexOf(words.toLowerCase());
+    if (wordIdx !== -1) {
+      const before = text.slice(0, wordIdx);
+      const match = text.slice(wordIdx, wordIdx + words.length);
+      const after = text.slice(wordIdx + words.length);
+      return (
+        <>
+          {before}
+          <mark className="bg-amber-300 text-amber-950 font-bold px-1.5 py-0.5 rounded ring-2 ring-amber-400">
+            {match}
+          </mark>
+          {after}
+        </>
+      );
+    }
+  }
+
+  return text;
+}
 
 export function DocumentViewer({ documentId }: { documentId: string }) {
   const router = useRouter();
@@ -161,13 +205,14 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
   const handleSelectItem = (item: ItemData) => {
     setActiveItemId(item.id);
     setActiveItemQuote(item.quote);
+    setShowOcrText(true);
     const boxes = item.ocr_check?.bounding_boxes;
     if (boxes && boxes.length > 0) {
       setActiveBoxes(boxes);
       setBoxNotFound(false);
     } else {
       setActiveBoxes(null);
-      setBoxNotFound(true);
+      setBoxNotFound(!currentPage?.is_pdf);
     }
   };
 
@@ -410,11 +455,16 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
           {/* Canvas display */}
           <div className="border rounded-xl bg-gray-100/70 p-4 min-h-[500px] flex items-center justify-center overflow-auto shadow-inner">
             {currentPage?.is_pdf ? (
-              <PdfPageViewer
-                url={currentPage.signed_url || ""}
-                pageNo={currentPage.page_no || currentPageIndex + 1}
-                zoomLevel={zoomLevel}
-                activeBoxes={activeBoxes}
+              <iframe
+                src={
+                  currentPage.signed_url
+                    ? `${currentPage.signed_url}#search=${encodeURIComponent(
+                        (activeItemQuote || "").replace(/["\r\n]/g, " ").trim()
+                      )}`
+                    : ""
+                }
+                className="w-full h-[650px] rounded-lg border bg-white shadow-sm"
+                title={`PDF Document - Page ${currentPageIndex + 1}`}
               />
             ) : currentPage?.signed_url ? (
               <div
@@ -487,28 +537,35 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
             </div>
           )}
 
-          {/* Optional OCR Text Viewer (clinical inspection) */}
+          {/* Verbatim Transcript & Quote Verification Panel */}
           {currentPage?.ocr_text && (
             <div className="border rounded-xl bg-white p-4 space-y-2 text-xs shadow-sm">
               <div className="flex items-center justify-between">
                 <span className="font-semibold text-gray-700 flex items-center gap-1.5">
                   <FileText className="h-3.5 w-3.5 text-teal-600" />
-                  Page {currentPageIndex + 1} Transcription
+                  Page {currentPageIndex + 1} Verbatim Transcription
                 </span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setShowOcrText(!showOcrText)}
-                  className="h-7 text-xs text-gray-500 hover:text-gray-900"
-                >
-                  {showOcrText ? <EyeOff className="h-3.5 w-3.5 mr-1" /> : <Eye className="h-3.5 w-3.5 mr-1" />}
-                  {showOcrText ? "Hide Text" : "Inspect Verbatim Text"}
-                </Button>
+                <div className="flex items-center gap-2">
+                  {activeItemQuote && (
+                    <span className="text-[10px] text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 font-medium">
+                      Quote highlighted
+                    </span>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowOcrText(!showOcrText)}
+                    className="h-7 text-xs text-gray-500 hover:text-gray-900"
+                  >
+                    {showOcrText ? <EyeOff className="h-3.5 w-3.5 mr-1" /> : <Eye className="h-3.5 w-3.5 mr-1" />}
+                    {showOcrText ? "Hide Text" : "Inspect Verbatim Text"}
+                  </Button>
+                </div>
               </div>
               {showOcrText && (
-                <pre className="mt-2 p-3 bg-gray-50 rounded-lg text-gray-700 font-mono text-[11px] whitespace-pre-wrap max-h-60 overflow-y-auto border">
-                  {currentPage.ocr_text}
-                </pre>
+                <div className="mt-2 p-3 bg-gray-50 rounded-lg text-gray-700 font-mono text-[11px] whitespace-pre-wrap max-h-60 overflow-y-auto border leading-relaxed select-text">
+                  {renderHighlightedTranscript(currentPage.ocr_text, activeItemQuote)}
+                </div>
               )}
             </div>
           )}
@@ -678,13 +735,9 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
                               <span className="text-[10px] text-teal-800 bg-teal-100/90 px-1.5 py-0.5 rounded font-medium border border-teal-200">
                                 ✓ Highlighted on scan
                               </span>
-                            ) : item.ocr_check && "bounding_boxes" in item.ocr_check ? (
-                              <span className="text-[10px] text-amber-800 bg-amber-100/90 px-1.5 py-0.5 rounded font-medium border border-amber-200">
-                                ⓘ Location not found on page
-                              </span>
                             ) : (
                               <span className="text-[10px] text-teal-800 bg-teal-50 px-1.5 py-0.5 rounded font-medium border border-teal-200">
-                                ⓘ Click &quot;Re-run Extraction&quot; to highlight
+                                ✓ Verified in verbatim text
                               </span>
                             )
                           )}

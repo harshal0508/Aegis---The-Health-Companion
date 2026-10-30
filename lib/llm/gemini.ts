@@ -30,7 +30,6 @@ interface ExtractionPayload {
     value: string;
     quote: string;
     confidence: number;
-    box_2d?: [number, number, number, number];
   }>;
 }
 
@@ -124,10 +123,9 @@ Inspect the document header, patient demographics banner, or bill details:
 
 CRITICAL RULES:
 1. For every item, provide "quote": the EXACT verbatim snippet as it appears in the document. The quote MUST be present word-for-word in the "ocr_text".
-2. For every item, provide "box_2d": [ymin, xmin, ymax, xmax] coordinates (integers 0 to 1000) locating the verbatim quote on this page image/PDF.
-3. Set "confidence": between 0.0 and 1.0 based on visual clarity and certainty.
-4. Do not invent, infer, or hallucinate any medications or diagnoses that are not explicitly stated on this page.
-5. Return strictly valid JSON adhering to the specified schema.
+2. Set "confidence": between 0.0 and 1.0 based on visual clarity and certainty.
+3. Do not invent, infer, or hallucinate any medications or diagnoses that are not explicitly stated on this page.
+4. Return strictly valid JSON adhering to the specified schema.
 `;
 
     // Response schema for structured output
@@ -157,11 +155,6 @@ CRITICAL RULES:
               value: { type: "STRING" },
               quote: { type: "STRING" },
               confidence: { type: "NUMBER" },
-              box_2d: {
-                type: "ARRAY",
-                items: { type: "INTEGER" },
-                description: "Normalized 2D box [ymin, xmin, ymax, xmax] on a 0-1000 scale locating the verbatim quote.",
-              },
             },
             required: ["category", "value", "quote", "confidence"],
           },
@@ -324,7 +317,6 @@ CRITICAL RULES:
       page_no: pageNo,
       quote: item.quote,
       confidence: Math.min(1, Math.max(0, item.confidence ?? 0.8)),
-      box_2d: item.box_2d && item.box_2d.length === 4 ? item.box_2d : undefined,
       normalization_source: "none",
     }));
 
