@@ -128,14 +128,14 @@ describe("Live District News Scanner & Clinical Relevance Filters", () => {
           <item>
             <title>Indore water contamination: Audit report links 15 deaths to outbreak in Bhagirathpura - The Hindu</title>
             <link>https://news.google.com/rss/articles/CBMi5wFBVV95cUXPTfHxa0tOnZNqUUcOZHJNQldsVINIeXRRODB2M3REYzZId3dXNmICS1ZCW?oc=5</link>
-            <pubDate>Wed, 14 Jan 2026 08:00:00 GMT</pubDate>
+            <pubDate>Wed, 14 Oct 2026 08:00:00 GMT</pubDate>
             <source>The Hindu</source>
             <description>&lt;a href="https://news.google.com/rss/articles/CBMi5wFBVV95cUXPTfHxa0tOnZNqUUcOZHJNQldsVINIeXRRODB2M3REYzZId3dXNmICS1ZCW?oc=5" target="_blank"&gt;Indore water contamination: Audit report links 15 deaths to outbreak in Bhagirathpura&lt;/a&gt;&amp;nbsp;&amp;nbsp;&lt;font color="#6f6f6f"&gt;The Hindu&lt;/font&gt;</description>
           </item>
           <item>
             <title>Dengue cases up 90% in district in a year - The Times of India</title>
             <link>https://news.google.com/rss/articles/CBMisAFBVV95cUxNYndxSGpjUXIwaDZ6ZEFkWG9TTG1kMGtoSU1sWThlWFgwaF9zbGNGNlFJaGw0ZUJjYjMwQjhXWTRwUVBkM21kYjl5UmJuRm54TlNRdV9Ga18tMTVFN1MyWHc3a29qVld4MXh6b2ozbVlGeDBDTlRSUTRvVTNFSlFYb01rSUJoeS1qWG9fUVRuWmp3NVNwbERCbW03dmx4bVV4RTdUTHFJSnlsUDBrQ25BNtIBtgFBVV95cUxOM21DUm?oc=5</link>
-            <pubDate>Wed, 03 Jan 2026 08:00:00 GMT</pubDate>
+            <pubDate>Wed, 28 Oct 2026 08:00:00 GMT</pubDate>
             <source>The Times of India</source>
             <description>&lt;a href="https://news.google.com/rss/articles/..." target="_blank"&gt;Dengue cases up 90% in district in a year&lt;/a&gt;&amp;nbsp;&amp;nbsp;&lt;font color="#6f6f6f"&gt;The Times of India&lt;/font&gt;</description>
           </item>
@@ -219,5 +219,30 @@ describe("Live District News Scanner & Clinical Relevance Filters", () => {
     expect(articles[1].publishedAt).toBe("2026-10-27");
     expect(articles[2].publishedAt).toBe("2026-10-06");
     expect(articles[3].publishedAt).toBe("2026-10-01");
+  });
+
+  it("strictly returns empty array if XML only contains older historical months (no fallback to old news)", () => {
+    const historicalXml = `
+      <rss version="2.0">
+        <channel>
+          <item>
+            <title>Indore water contamination: Audit report links 15 deaths to outbreak in Bhagirathpura - The Hindu</title>
+            <link>https://news.google.com/articles/old-jan</link>
+            <pubDate>Wed, 14 Jan 2026 08:00:00 GMT</pubDate>
+            <source>The Hindu</source>
+          </item>
+          <item>
+            <title>Dehydration, heatstroke cases rise in Indore - The Times of India</title>
+            <link>https://news.google.com/articles/old-may</link>
+            <pubDate>Fri, 15 May 2026 08:00:00 GMT</pubDate>
+            <source>The Times of India</source>
+          </item>
+        </channel>
+      </rss>
+    `;
+
+    const articles = parseGoogleNewsRss(historicalXml, "Indore");
+    // Must strictly return 0 items instead of leaking January/May news
+    expect(articles.length).toBe(0);
   });
 });

@@ -18,11 +18,11 @@ export interface DistrictNewsArticle {
 
 // Comprehensive whitelist: Matches any infectious disease, seasonal outbreak, surge, epidemic, or public health alert
 const COMMUNICABLE_DISEASE_REGEX =
-  /\b(outbreak|epidemic|cases\s+surge|cases\s+rise|cases\s+spike|spurt|surge|spread|spreading|infection|infections|health\s+alert|public\s+health|hospitalized|patients\s+flood|advisory|dengue|malaria|chikungunya|h1n1|swine\s+flu|flu|influenza|viral|fever|cholera|typhoid|jaundice|hepatitis|measles|chickenpox|zika|nipah|leptospirosis|scrub\s+typhus|conjunctivitis|eye\s+flu|gastroenteritis|diarrhea|diarrhoea|food\s+poisoning|pneumonia|rsv|hfmd|hand\s+foot|respiratory|strep|pertussis|rabies|tuberculosis|tb|norovirus|rotavirus|mystery\s+(illness|fever|disease))\b/i;
+  /\b(outbreak|epidemic|cases\s+surge|cases\s+rise|cases\s+spike|spurt|(?:cases|infection|infections|fever|disease|patient|patients)\s+surge|spread|spreading|infection|infections|health\s+alert|public\s+health|hospitalized|patients\s+flood|advisory|dengue|malaria|chikungunya|h1n1|swine\s+flu|flu|influenza|viral|fever|cholera|typhoid|jaundice|hepatitis|measles|chickenpox|zika|nipah|leptospirosis|scrub\s+typhus|conjunctivitis|eye\s+flu|gastroenteritis|diarrhea|diarrhoea|food\s+poisoning|pneumonia|rsv|hfmd|hand\s+foot|respiratory|strep|pertussis|rabies|tuberculosis|tb|norovirus|rotavirus|mystery\s+(?:illness|fever|disease))\b/i;
 
-// Strict blacklist: Eliminate hospital administrative scandals, animal sightings, police/crime, political or sports news
+// Strict blacklist: Eliminate shopping/business, travel fares, exam admissions, crime, animal sightings, police
 const IRRELEVANT_CIVIC_REGEX =
-  /\b(snake|animal|leopard|dog|accident|crash|police|murder|theft|scam|corruption|brick|tender|stretcher|bribe|fire|arrest|fraud|protest|assault|dowry|bandage\s+row|traffic|cricket|ipl|movie|film|box\s+office|election|vote|rally|bjp|congress|aap|rape|gang-rape|sexual|burglary|liquor|fir|robbery)\b/i;
+  /\b(snake|animal|leopard|dog|accident|crash|police|murder|theft|scam|corruption|brick|tender|stretcher|bribe|fire|arrest|fraud|protest|assault|dowry|bandage\s+row|traffic|cricket|ipl|movie|film|box\s+office|election|vote|rally|bjp|congress|aap|rape|gang-rape|sexual|burglary|liquor|fir|robbery|shopping|retail|market|bazaar|trader|traders|sales|diwali|festival|fare|fares|ticket|tickets|travel|train|flight|bus|admission|admissions|cat\b|iim\b|iit\b|exam|exams|college|student|students|university|school\s+admission|gold|silver|stock|share\s+price|sensex|nifty)\b/i;
 
 /**
  * Fetch and parse real news articles for a specific district and disease query.
@@ -33,9 +33,9 @@ export async function fetchLiveDistrictHealthNews(
 ): Promise<DistrictNewsArticle[]> {
   try {
     const cleanDistrict = (district || "Indore").trim();
-    // Dynamic, wide-spectrum query to capture ANY active disease outbreak, epidemic, or surge spreading at this time
+    // Compact query string to ensure Google News respects the when:30d operator
     const query = encodeURIComponent(
-      `"${cleanDistrict}" (outbreak OR epidemic OR "cases surge" OR "cases rise" OR "cases spike" OR "health alert" OR "illness spreading" OR "infection surge" OR "viral fever" OR "eye flu" OR conjunctivitis OR dengue OR malaria OR chikungunya OR flu OR influenza OR H1N1 OR cholera OR typhoid OR jaundice OR hepatitis OR measles OR "scrub typhus" OR "food poisoning" OR "mystery fever" OR infection OR contamination OR fever OR health) when:30d`
+      `"${cleanDistrict}" (outbreak OR epidemic OR surge OR dengue OR malaria OR fever OR cholera OR typhoid OR infection OR contamination OR health) when:30d`
     );
     const feedUrl = `https://news.google.com/rss/search?q=${query}&hl=en-IN&gl=IN&ceid=IN:en`;
 
@@ -143,14 +143,9 @@ export function parseGoogleNewsRss(xml: string, district: string): DistrictNewsA
     (a) => a.publishedAt >= startOfMonth && a.publishedAt <= todayStr
   );
 
-  // If the current active month has articles, use only current month articles
-  if (currentMonthArticles.length > 0) {
-    return currentMonthArticles.slice(0, 8);
-  }
-
-  // Fallback for testing environments or early-month boundary cases:
-  // Return the freshest available items, strictly sorted in decreasing order
-  return rawArticles.slice(0, 8);
+  // Strict Month Enforcement: Return only articles published in the active calendar month
+  // (from the current date down to the 1st of this month). Never fallback to older historical months.
+  return currentMonthArticles.slice(0, 8);
 }
 
 /**
