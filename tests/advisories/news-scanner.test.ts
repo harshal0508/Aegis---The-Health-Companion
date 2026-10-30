@@ -120,4 +120,46 @@ describe("Live District News Scanner & Clinical Relevance Filters", () => {
     const eyeFluArticle = articles.find((a) => a.title.includes("Eye flu"));
     expect(eyeFluArticle?.snippet).toContain("Health department issues advisory");
   });
+
+  it("handles Google News encoded HTML description without leaking raw <a> tags or URLs into snippet", () => {
+    const googleNewsXml = `
+      <rss version="2.0">
+        <channel>
+          <item>
+            <title>Indore water contamination: Audit report links 15 deaths to outbreak in Bhagirathpura - The Hindu</title>
+            <link>https://news.google.com/rss/articles/CBMi5wFBVV95cUXPTfHxa0tOnZNqUUcOZHJNQldsVINIeXRRODB2M3REYzZId3dXNmICS1ZCW?oc=5</link>
+            <pubDate>Wed, 14 Jan 2026 08:00:00 GMT</pubDate>
+            <source>The Hindu</source>
+            <description>&lt;a href="https://news.google.com/rss/articles/CBMi5wFBVV95cUXPTfHxa0tOnZNqUUcOZHJNQldsVINIeXRRODB2M3REYzZId3dXNmICS1ZCW?oc=5" target="_blank"&gt;Indore water contamination: Audit report links 15 deaths to outbreak in Bhagirathpura&lt;/a&gt;&amp;nbsp;&amp;nbsp;&lt;font color="#6f6f6f"&gt;The Hindu&lt;/font&gt;</description>
+          </item>
+          <item>
+            <title>Dengue cases up 90% in district in a year - The Times of India</title>
+            <link>https://news.google.com/rss/articles/CBMisAFBVV95cUxNYndxSGpjUXIwaDZ6ZEFkWG9TTG1kMGtoSU1sWThlWFgwaF9zbGNGNlFJaGw0ZUJjYjMwQjhXWTRwUVBkM21kYjl5UmJuRm54TlNRdV9Ga18tMTVFN1MyWHc3a29qVld4MXh6b2ozbVlGeDBDTlRSUTRvVTNFSlFYb01rSUJoeS1qWG9fUVRuWmp3NVNwbERCbW03dmx4bVV4RTdUTHFJSnlsUDBrQ25BNtIBtgFBVV95cUxOM21DUm?oc=5</link>
+            <pubDate>Wed, 03 Jan 2026 08:00:00 GMT</pubDate>
+            <source>The Times of India</source>
+            <description>&lt;a href="https://news.google.com/rss/articles/..." target="_blank"&gt;Dengue cases up 90% in district in a year&lt;/a&gt;&amp;nbsp;&amp;nbsp;&lt;font color="#6f6f6f"&gt;The Times of India&lt;/font&gt;</description>
+          </item>
+        </channel>
+      </rss>
+    `;
+
+    const articles = parseGoogleNewsRss(googleNewsXml, "Indore");
+    expect(articles.length).toBe(2);
+
+    for (const article of articles) {
+      // Must not contain raw HTML tags or encoded URLs in snippet!
+      expect(article.snippet).not.toContain("<a href=");
+      expect(article.snippet).not.toContain("</a>");
+      expect(article.snippet).not.toContain("<font");
+      expect(article.snippet).not.toContain("&nbsp;");
+      expect(article.snippet).not.toContain("https://");
+      expect(article.snippet.length).toBeGreaterThan(20);
+    }
+
+    const waterArticle = articles.find((a) => a.title.includes("water contamination"));
+    expect(waterArticle?.snippet).toContain("water safety");
+
+    const dengueArticle = articles.find((a) => a.title.includes("Dengue"));
+    expect(dengueArticle?.snippet).toContain("vector-borne");
+  });
 });

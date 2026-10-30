@@ -101,18 +101,9 @@ export function parseGoogleNewsRss(xml: string, district: string): DistrictNewsA
       }
     }
 
-    // Extract description / snippet if available from RSS
-    let snippet = `Regional press report concerning communicable disease trends in the ${district} district.`;
-    if (descMatch) {
-      const cleanDesc = descMatch[1]
-        .replace(/<!\[CDATA\[(.*?)\]\]>/g, "$1")
-        .replace(/<[^>]+>/g, " ")
-        .replace(/\s+/g, " ")
-        .trim();
-      if (cleanDesc && cleanDesc.length > 15) {
-        snippet = decodeXmlEntities(cleanDesc);
-      }
-    }
+    // Extract and clean description / snippet from RSS
+    let rawDesc = descMatch ? descMatch[1] : "";
+    const snippet = extractCleanSnippet(rawDesc, decodeXmlEntities(rawTitle), decodeXmlEntities(source), district);
 
     const url = linkMatch ? linkMatch[1].trim() : "#";
     const publishedAt = pubDateMatch
@@ -135,11 +126,90 @@ export function parseGoogleNewsRss(xml: string, district: string): DistrictNewsA
   return articles;
 }
 
+/**
+ * Extracts a human-readable, plain-text snippet from RSS descriptions.
+ * Google News RSS descriptions do not provide article body text—they only contain
+ * an encoded <a> link with the headline and a <font> tag with the publisher.
+ * If the description is empty or merely repeats the title, this synthesizes a clean,
+ * clinically contextual summary based on the matched health conditions.
+ */
+function extractCleanSnippet(
+  rawDesc: string,
+  title: string,
+  source: string,
+  district: string
+): string {
+  if (!rawDesc) {
+    return generateContextualSnippet(title, district);
+  }
+
+  // 1. Unescape CDATA and XML/HTML entities so all tags become literal HTML <tag>
+  let text = rawDesc.replace(/<!\[CDATA\[(.*?)\]\]>/g, "$1");
+  text = decodeXmlEntities(text);
+
+  // 2. Strip all HTML tags (<a ...>, <font ...>, <p>, etc.) and whitespace
+  text = text
+    .replace(/<[^>]+>/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  // 3. Compare normalized text against title + publisher to detect Google News self-references
+  const normText = text.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const normTitle = title.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const normSource = source.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const normCombined = normTitle + normSource;
+
+  // If the RSS description is empty, or merely echoes the title/source (characteristic of Google News RSS):
+  const isEchoOfTitle =
+    normText === normTitle ||
+    normText === normCombined ||
+    (normTitle.length > 20 && normText.startsWith(normTitle));
+
+  if (!text || text.length < 15 || isEchoOfTitle) {
+    return generateContextualSnippet(title, district);
+  }
+
+  return text;
+}
+
+/**
+ * Synthesizes an informative contextual summary when the press RSS feed omits full article body text.
+ */
+function generateContextualSnippet(title: string, district: string): string {
+  const t = title.toLowerCase();
+
+  if (/water|diarrh|cholera|contaminat|drink|vomit|gastro/i.test(t)) {
+    return `Regional press coverage tracking water safety, gastrointestinal illness cases, and municipal containment measures in ${district}.`;
+  }
+  if (/dengue|malaria|chikungunya|mosquito|larva|vector/i.test(t)) {
+    return `Local press report tracking vector-borne case trends, municipal fogging operations, and hospital admissions in ${district}.`;
+  }
+  if (/flu|influenza|h1n1|h3n2|cough|respiratory|pneumonia/i.test(t)) {
+    return `Media coverage monitoring viral respiratory infection trends, OPD volume, and civic health advisories across ${district}.`;
+  }
+  if (/conjunctivitis|eye\s*flu/i.test(t)) {
+    return `Public health reporting on contact viral eye infections, school precautions, and outpatient surge in ${district}.`;
+  }
+  if (/measles|rubella|rash|chickenpox/i.test(t)) {
+    return `Local health dispatch tracking pediatric viral cases, containment survey, and immunization response in ${district}.`;
+  }
+  if (/hepatitis|jaundice|typhoid/i.test(t)) {
+    return `Regional reporting on water and food hygiene inspections, pipeline testing, and jaundice cases in ${district}.`;
+  }
+
+  return `Live regional press reporting on active communicable illness patterns and community health updates in ${district} district.`;
+}
+
 function decodeXmlEntities(str: string): string {
   return str
     .replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'");
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&#8216;|&#8217;/g, "'")
+    .replace(/&#8220;|&#8221;/g, '"')
+    .replace(/&#8211;|&#8212;/g, " - ");
 }
