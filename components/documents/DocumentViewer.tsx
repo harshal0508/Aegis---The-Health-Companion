@@ -29,6 +29,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatClinicalDate } from "@/lib/utils";
 import { isNegativeAllergy } from "@/lib/emergency/sanitizer";
+import { PdfPageViewer } from "@/components/documents/PdfPageViewer";
 
 interface PageData {
   id: string;
@@ -409,10 +410,11 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
           {/* Canvas display */}
           <div className="border rounded-xl bg-gray-100/70 p-4 min-h-[500px] flex items-center justify-center overflow-auto shadow-inner">
             {currentPage?.is_pdf ? (
-              <iframe
-                src={currentPage.signed_url || ""}
-                className="w-full h-[650px] rounded-lg border bg-white"
-                title={`Document Page ${currentPageIndex + 1}`}
+              <PdfPageViewer
+                url={currentPage.signed_url || ""}
+                pageNo={currentPage.page_no || currentPageIndex + 1}
+                zoomLevel={zoomLevel}
+                activeBoxes={activeBoxes}
               />
             ) : currentPage?.signed_url ? (
               <div

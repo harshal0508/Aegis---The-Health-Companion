@@ -370,13 +370,38 @@ export async function POST(
         if (deduplicatedItems.length > 0) {
         const rowsToInsert = deduplicatedItems.map((item) => {
           let itemStatus: "extracted" | "needs_review" = item.status;
-          let ocrCheckPayload: any = null;
           let reviewReason: string | null = null;
+
+          // Convert box_2d from Gemini to normalized bounding box if present
+          const boundingBoxes =
+            item.box_2d && item.box_2d.length === 4
+              ? [
+                  {
+                    x: Math.max(0, Math.min(1, item.box_2d[1] / 1000)),
+                    y: Math.max(0, Math.min(1, item.box_2d[0] / 1000)),
+                    w: Math.max(0.01, Math.min(1, (item.box_2d[3] - item.box_2d[1]) / 1000)),
+                    h: Math.max(0.01, Math.min(1, (item.box_2d[2] - item.box_2d[0]) / 1000)),
+                  },
+                ]
+              : null;
+
+          let ocrCheckPayload: any = {
+            state: secondaryOcrResult ? "agree" : "unavailable",
+            page_confidence: secondaryOcrResult?.pageConfidence ?? 95,
+            matched_tokens: [],
+            missing_tokens: [],
+            bounding_boxes: boundingBoxes,
+          };
 
           // 3. Second-Reader Cross-Check Gate
           if (secondaryOcrResult) {
             const check = crossCheckItem(item, secondaryOcrResult);
             ocrCheckPayload = check.ocrCheckPayload;
+            if (check.boundingBoxes && check.boundingBoxes.length > 0) {
+              ocrCheckPayload.bounding_boxes = check.boundingBoxes;
+            } else if (boundingBoxes) {
+              ocrCheckPayload.bounding_boxes = boundingBoxes;
+            }
 
             if (check.state === "disagree") {
               // Mark needs_review with specific token disagreement reason; never delete the item

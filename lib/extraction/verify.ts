@@ -187,6 +187,7 @@ export function deduplicateExtractedItems<
     page_no?: number;
     page_id?: string;
     confidence?: number;
+    box_2d?: [number, number, number, number];
     status?: string;
     verified?: boolean;
     normalization_source?: string;
