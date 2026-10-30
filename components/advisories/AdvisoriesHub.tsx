@@ -723,10 +723,10 @@ export function AdvisoriesHub({
                         </p>
                       </div>
 
-                      {/* Footer: Plain-Language Health Topic & Action Button */}
+                      {/* Footer: Plain-Language Health Type & Action Button */}
                       <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
                         <div className="flex items-center gap-1.5 text-xs select-none">
-                          <span className="text-slate-400 font-medium">Topic:</span>
+                          <span className="text-slate-400 font-medium">Type:</span>
                           <span className={`font-semibold tracking-tight ${topic.tagColor}`}>
                             {topic.label}
                           </span>
