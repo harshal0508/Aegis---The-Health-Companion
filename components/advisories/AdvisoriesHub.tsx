@@ -116,6 +116,50 @@ const CATEGORY_THEME: Record<
   },
 };
 
+function getArticleTopicBadge(title: string) {
+  const t = title.toLowerCase();
+  if (/dengue|malaria|chikungunya|mosquito|vector/i.test(t)) {
+    return {
+      label: "Vector Alert",
+      bg: "bg-rose-50 text-rose-700 border-rose-200/90",
+      dot: "bg-rose-500",
+    };
+  }
+  if (/water|diarrh|cholera|contaminat|drink|vomit|borewell|pipeline/i.test(t)) {
+    return {
+      label: "Water Safety",
+      bg: "bg-cyan-50 text-cyan-800 border-cyan-200/90",
+      dot: "bg-cyan-500",
+    };
+  }
+  if (/flu|influenza|h1n1|h3n2|respiratory|cough|pneumonia/i.test(t)) {
+    return {
+      label: "Respiratory",
+      bg: "bg-sky-50 text-sky-700 border-sky-200/90",
+      dot: "bg-sky-500",
+    };
+  }
+  if (/eye\s*flu|conjunctivitis/i.test(t)) {
+    return {
+      label: "Viral Eye Infection",
+      bg: "bg-violet-50 text-violet-700 border-violet-200/90",
+      dot: "bg-violet-500",
+    };
+  }
+  if (/fever|surge|spike|outbreak|epidemic|hospitalized/i.test(t)) {
+    return {
+      label: "Active Outbreak",
+      bg: "bg-amber-50 text-amber-800 border-amber-200/90",
+      dot: "bg-amber-500",
+    };
+  }
+  return {
+    label: "Community Health",
+    bg: "bg-slate-50 text-slate-700 border-slate-200/90",
+    dot: "bg-slate-400",
+  };
+}
+
 export function AdvisoriesHub({
   confirmedItems,
   initialLocality = "Indore (452001)",
@@ -627,42 +671,68 @@ export function AdvisoriesHub({
                   (a, b) =>
                     new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
                 )
-                .map((article) => (
-                <div key={article.id} className="apple-card apple-card-hover p-5 border-t-4 border-t-amber-500 flex flex-col justify-between space-y-3 shadow-2xs">
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-[11px] text-slate-400">
-                      <span className="font-bold text-amber-900 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200/80">
-                        {article.source}
-                      </span>
-                      <span className="flex items-center gap-1 font-medium">
-                        <Calendar className="h-3 w-3" />
-                        {article.publishedAt}
-                      </span>
-                    </div>
-                    <h2 className="text-base font-serif font-medium text-slate-900 leading-snug">
-                      {article.title}
-                    </h2>
-                    <p className="text-slate-600 leading-relaxed text-xs">
-                      {article.snippet}
-                    </p>
-                  </div>
+                .map((article) => {
+                  const topic = getArticleTopicBadge(article.title);
+                  const formattedDate = new Date(article.publishedAt).toLocaleDateString("en-IN", {
+                    day: "numeric",
+                    month: "short",
+                    year: "numeric",
+                  });
 
-                  <div className="pt-2.5 border-t border-slate-100 flex items-center justify-between">
-                    <span className="text-[10px] text-amber-800 bg-amber-50/70 px-2 py-0.5 rounded-full font-medium border border-amber-200/80">
-                      Regional Press Report
-                    </span>
-                    <a
-                      href={article.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs font-bold text-indigo-600 hover:text-indigo-800 inline-flex items-center gap-1 group"
+                  return (
+                    <div
+                      key={article.id}
+                      className="apple-card apple-card-hover p-5 border-t-4 border-t-amber-500 flex flex-col justify-between space-y-3 shadow-2xs"
                     >
-                      <span>Read Full Report</span>
-                      <ExternalLink className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" />
-                    </a>
-                  </div>
-                </div>
-              ))}
+                      <div className="space-y-2.5">
+                        {/* Editorial Publisher Signature & Human Formatted Date */}
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className="h-6 w-6 rounded-lg bg-slate-900 text-white flex items-center justify-center text-[10px] font-bold shadow-2xs shrink-0 select-none">
+                              {article.source.charAt(0).toUpperCase()}
+                            </div>
+                            <span className="text-xs font-bold text-slate-900 tracking-tight truncate">
+                              {article.source}
+                            </span>
+                          </div>
+                          <span className="text-[11px] font-mono text-slate-400 shrink-0">
+                            {formattedDate}
+                          </span>
+                        </div>
+
+                        {/* Title */}
+                        <h2 className="text-base font-serif font-medium text-slate-900 leading-snug">
+                          {article.title}
+                        </h2>
+
+                        {/* Excerpt */}
+                        <p className="text-slate-600 leading-relaxed text-xs">
+                          {article.snippet}
+                        </p>
+                      </div>
+
+                      {/* Footer: Intelligent Topic Tag & Modern Action Button */}
+                      <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+                        <div
+                          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-medium ${topic.bg}`}
+                        >
+                          <span className={`h-1.5 w-1.5 rounded-full ${topic.dot}`} />
+                          <span>{topic.label}</span>
+                        </div>
+
+                        <a
+                          href={article.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs font-semibold text-slate-700 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200/80 inline-flex items-center gap-1.5 transition-all shadow-2xs group"
+                        >
+                          <span>Original Story</span>
+                          <ExternalLink className="h-3 w-3 text-slate-400 group-hover:text-slate-700 transition-colors" />
+                        </a>
+                      </div>
+                    </div>
+                  );
+                })}
             </div>
           )}
         </div>
