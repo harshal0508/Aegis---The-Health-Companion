@@ -59,6 +59,30 @@ export function isValidEmergencyToken(token: string | null | undefined): boolean
 }
 
 /**
+ * Detects whether an allergy statement is an explicit negative finding / attestation
+ * (e.g. "No known drug allergies", "NKDA", "NKA", "No known allergies").
+ */
+export function isNegativeAllergy(value: string | null | undefined): boolean {
+  if (!value || typeof value !== "string") return false;
+  const lower = value.toLowerCase().trim();
+  return (
+    lower.includes("no known drug allergies") ||
+    lower.includes("no known allergies") ||
+    lower.includes("no known allergy") ||
+    lower.includes("no allergies") ||
+    lower.includes("no drug allergies") ||
+    lower.includes("no drug allergy") ||
+    lower.includes("nkda") ||
+    lower.includes("nka") ||
+    lower.includes("nil known") ||
+    lower.includes("no adverse drug reactions") ||
+    lower.includes("no known adverse") ||
+    lower.includes("none reported") ||
+    lower.includes("none known")
+  );
+}
+
+/**
  * Formats allergy display according to clinical provenance rules.
  * NKDA is contextualized with doc type and signed date (with age).
  */
@@ -68,10 +92,7 @@ export function formatAllergyItem(item: {
   doc_date?: string | null;
   doc_date_type?: string | null;
 }): string {
-  const lower = item.value.toLowerCase();
-  const isNkda = lower.includes("no known drug allergies") || lower.includes("nkda");
-
-  if (!isNkda) {
+  if (!isNegativeAllergy(item.value)) {
     return item.value;
   }
 

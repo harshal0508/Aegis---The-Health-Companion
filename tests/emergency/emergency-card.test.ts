@@ -9,6 +9,7 @@ import {
 import {
   isValidEmergencyToken,
   formatAllergyItem,
+  isNegativeAllergy,
   sanitizeResponderData,
   buildWalletCardPayload,
   type RawDbItem,
@@ -354,6 +355,25 @@ describe("Phase 5: Emergency Card System", () => {
 
       const formatted = formatAllergyItem(allergen);
       expect(formatted).toBe("Penicillin - Causes acute anaphylaxis and facial swelling");
+    });
+
+    it("correctly identifies negative allergy statements (NKDA / NKA)", () => {
+      expect(isNegativeAllergy("No known drug allergies")).toBe(true);
+      expect(isNegativeAllergy("NKDA")).toBe(true);
+      expect(isNegativeAllergy("NKA")).toBe(true);
+      expect(isNegativeAllergy("No known allergies")).toBe(true);
+      expect(isNegativeAllergy("No drug allergies")).toBe(true);
+      expect(isNegativeAllergy("Nil known drug allergies")).toBe(true);
+      expect(isNegativeAllergy("No known drug allergies, per discharge_summary, unspecified 17 Oct 2026")).toBe(true);
+      expect(isNegativeAllergy("No adverse drug reactions")).toBe(true);
+
+      // Positive allergies must return false
+      expect(isNegativeAllergy("Penicillin")).toBe(false);
+      expect(isNegativeAllergy("Sulfa antibiotics (rash)")).toBe(false);
+      expect(isNegativeAllergy("Aspirin - severe anaphylaxis")).toBe(false);
+      expect(isNegativeAllergy("")).toBe(false);
+      expect(isNegativeAllergy(null)).toBe(false);
+      expect(isNegativeAllergy(undefined)).toBe(false);
     });
   });
 

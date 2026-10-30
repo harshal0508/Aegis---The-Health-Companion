@@ -23,10 +23,12 @@ import {
   CheckCircle2,
   Eye,
   EyeOff,
+  ShieldCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatClinicalDate } from "@/lib/utils";
+import { isNegativeAllergy } from "@/lib/emergency/sanitizer";
 
 interface PageData {
   id: string;
@@ -612,9 +614,15 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
                           {item.category}
                         </span>
                         {item.category === "allergy" && (
-                          <Badge variant="allergy" className="text-[10px] px-1.5 py-0">
-                            Allergy
-                          </Badge>
+                          isNegativeAllergy(item.value) ? (
+                            <Badge className="bg-emerald-50 text-emerald-800 border-emerald-200 text-[10px] px-1.5 py-0 font-medium">
+                              <ShieldCheck className="h-2.5 w-2.5 mr-1 text-emerald-600" /> NKDA (No Allergies)
+                            </Badge>
+                          ) : (
+                            <Badge variant="allergy" className="text-[10px] px-1.5 py-0">
+                              Allergy
+                            </Badge>
+                          )
                         )}
                       </div>
 

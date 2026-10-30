@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateEmergencyToken, hashEmergencyToken } from "@/lib/emergency/token";
+import { isNegativeAllergy } from "@/lib/emergency/sanitizer";
 
 export async function GET(request: Request) {
   try {
@@ -109,6 +110,8 @@ export async function GET(request: Request) {
 
     const confirmedCounts: Record<string, number> = {
       allergy: 0,
+      allergy_active: 0,
+      allergy_nkda: 0,
       medication: 0,
       condition: 0,
       surgery: 0,
@@ -117,6 +120,13 @@ export async function GET(request: Request) {
     };
 
     (confirmedItems || []).forEach((item) => {
+      if (item.category === "allergy") {
+        if (isNegativeAllergy(item.value)) {
+          confirmedCounts.allergy_nkda++;
+        } else {
+          confirmedCounts.allergy_active++;
+        }
+      }
       if (confirmedCounts[item.category] !== undefined) {
         confirmedCounts[item.category]++;
       }

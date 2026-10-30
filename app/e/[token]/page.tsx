@@ -3,8 +3,9 @@ import Link from "next/link";
 import { headers } from "next/headers";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { ShieldAlert, AlertTriangle, Phone, Activity, Pill, Cpu, Heart } from "lucide-react";
+import { ShieldAlert, ShieldCheck, AlertTriangle, Phone, Activity, Pill, Cpu, Heart } from "lucide-react";
 import { formatClinicalDate, getDateAge } from "@/lib/utils";
+import { isNegativeAllergy } from "@/lib/emergency/sanitizer";
 import { getEmergencyResponderData } from "@/lib/emergency/responder";
 import type { Metadata } from "next";
 
@@ -114,46 +115,80 @@ export default async function EmergencyCardPage({
 
         {/* 1. Allergies & Adverse Reactions */}
         {showAllergies ? (
-          <section className="rounded-xl border-2 border-rose-200 bg-white p-5 shadow-sm space-y-3">
-            <div className="flex items-center justify-between border-b pb-2">
-              <div className="flex items-center gap-2 text-rose-700">
-                <ShieldAlert className="h-5 w-5" />
-                <h2 className="text-sm font-bold uppercase tracking-wider">
-                  Allergies & Sensitivities
-                </h2>
-              </div>
-              <Badge variant="allergy" className="text-[10px]">
-                Critical
-              </Badge>
-            </div>
+          (() => {
+            const allergiesList = data.grouped.allergy || [];
+            const hasActiveAllergies = allergiesList.some(
+              (item) => !isNegativeAllergy(item.value)
+            );
+            const hasOnlyNkda = allergiesList.length > 0 && !hasActiveAllergies;
 
-            {data.grouped.allergy.length === 0 ? (
-              <p className="text-sm text-gray-500 italic py-1">
-                {data.allergy_display_fallback}
-              </p>
-            ) : (
-              <ul className="space-y-3 divide-y divide-gray-100">
-                {data.grouped.allergy.map((item) => {
-                  const isNkda =
-                    item.value.toLowerCase().includes("no known drug allergies") ||
-                    item.value.toLowerCase().includes("nkda");
+            return (
+              <section
+                className={`rounded-xl bg-white p-5 shadow-sm space-y-3 ${
+                  hasActiveAllergies
+                    ? "border-2 border-rose-200"
+                    : hasOnlyNkda
+                    ? "border border-emerald-200"
+                    : "border border-gray-200"
+                }`}
+              >
+                <div className="flex items-center justify-between border-b pb-2">
+                  <div
+                    className={`flex items-center gap-2 ${
+                      hasActiveAllergies
+                        ? "text-rose-700"
+                        : hasOnlyNkda
+                        ? "text-emerald-800"
+                        : "text-gray-700"
+                    }`}
+                  >
+                    {hasActiveAllergies ? (
+                      <ShieldAlert className="h-5 w-5" />
+                    ) : (
+                      <ShieldCheck className="h-5 w-5 text-emerald-600" />
+                    )}
+                    <h2 className="text-sm font-bold uppercase tracking-wider">
+                      Allergies & Sensitivities
+                    </h2>
+                  </div>
+                  {hasActiveAllergies ? (
+                    <Badge variant="allergy" className="text-[10px]">
+                      Critical
+                    </Badge>
+                  ) : hasOnlyNkda ? (
+                    <Badge className="bg-emerald-50 text-emerald-800 border-emerald-200 text-[10px]">
+                      Confirmed NKDA
+                    </Badge>
+                  ) : null}
+                </div>
 
-                  return (
-                    <li key={item.id} className="pt-2 first:pt-0">
-                      <p className="text-base font-bold text-gray-900 leading-snug">
-                        {item.display_text || item.value}
-                      </p>
-                      {item.doc_date && !isNkda && (
-                        <p className="text-xs text-gray-500 mt-0.5">
-                          Documented: {formatClinicalDate(item.doc_date)} ({getDateAge(item.doc_date)})
-                        </p>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </section>
+                {allergiesList.length === 0 ? (
+                  <p className="text-sm text-gray-500 italic py-1">
+                    {data.allergy_display_fallback}
+                  </p>
+                ) : (
+                  <ul className="space-y-3 divide-y divide-gray-100">
+                    {allergiesList.map((item) => {
+                      const isNkda = isNegativeAllergy(item.value);
+
+                      return (
+                        <li key={item.id} className="pt-2 first:pt-0">
+                          <p className="text-base font-bold text-gray-900 leading-snug">
+                            {item.display_text || item.value}
+                          </p>
+                          {item.doc_date && !isNkda && (
+                            <p className="text-xs text-gray-500 mt-0.5">
+                              Documented: {formatClinicalDate(item.doc_date)} ({getDateAge(item.doc_date)})
+                            </p>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </section>
+            );
+          })()
         ) : (
           /* Clinical Safety Rule: Never omit allergies silently when toggled off */
           <section className="rounded-xl border border-dashed border-gray-300 bg-gray-50/80 p-4 space-y-1">

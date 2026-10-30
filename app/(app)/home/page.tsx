@@ -17,7 +17,8 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { formatClinicalDate } from "@/lib/utils";
+import { formatClinicalDate, cn } from "@/lib/utils";
+import { isNegativeAllergy } from "@/lib/emergency/sanitizer";
 import { TreatmentCourseCard } from "@/components/medications/TreatmentCourseCard";
 import type { Metadata } from "next";
 
@@ -95,7 +96,12 @@ export default async function HomePage() {
 
   const medicationsList = (confirmedItems || []).filter((i) => i.category === "medication");
   const medsCount = medicationsList.length;
-  const allergiesCount = (confirmedItems || []).filter((i) => i.category === "allergy").length;
+
+  const allAllergies = (confirmedItems || []).filter((i) => i.category === "allergy");
+  const activeAllergies = allAllergies.filter((i) => !isNegativeAllergy(i.value));
+  const hasNkda = allAllergies.some((i) => isNegativeAllergy(i.value));
+  const allergiesCount = activeAllergies.length;
+
   const conditionsCount = (confirmedItems || []).filter((i) => i.category === "condition").length;
 
   const firstName = activePatient.full_name ? activePatient.full_name.split(" ")[0] : "Patient";
@@ -183,18 +189,39 @@ export default async function HomePage() {
               <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
                 Allergies
               </span>
-              <div className="h-7 w-7 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center">
-                <ShieldAlert className="h-4 w-4" />
+              <div
+                className={cn(
+                  "h-7 w-7 rounded-xl flex items-center justify-center",
+                  allergiesCount > 0
+                    ? "bg-rose-50 text-rose-600"
+                    : hasNkda
+                    ? "bg-emerald-50 text-emerald-600"
+                    : "bg-slate-100 text-slate-400"
+                )}
+              >
+                {allergiesCount > 0 ? (
+                  <ShieldAlert className="h-4 w-4" />
+                ) : hasNkda ? (
+                  <ShieldCheck className="h-4 w-4" />
+                ) : (
+                  <ShieldAlert className="h-4 w-4" />
+                )}
               </div>
             </div>
             <div className="mt-2 flex items-baseline gap-2">
               <span className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
                 {allergiesCount}
               </span>
-              <span className="text-xs text-slate-500 font-semibold">Documented</span>
+              <span className="text-xs text-slate-500 font-semibold">
+                {allergiesCount === 0 && hasNkda ? "Active (NKDA)" : "Documented"}
+              </span>
             </div>
             <p className="text-[11px] text-slate-400 font-medium mt-1">
-              Adverse reaction alerts
+              {allergiesCount > 0
+                ? "Adverse reaction alerts"
+                : hasNkda
+                ? "No known drug allergies (confirmed)"
+                : "No allergies recorded"}
             </p>
           </div>
 

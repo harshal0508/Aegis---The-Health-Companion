@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
 import {
   ShieldAlert,
+  ShieldCheck,
   Pill,
   Activity,
   Scissors,
@@ -27,6 +28,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatClinicalDate, getDateAge, cn } from "@/lib/utils";
+import { isNegativeAllergy } from "@/lib/emergency/sanitizer";
 import { usePatient } from "@/components/patient/PatientContext";
 import { matchPatientIdentity } from "@/lib/extraction/identity-matcher";
 import { getMedicationPurpose } from "@/lib/medications/purpose-resolver";
@@ -372,9 +374,7 @@ export function HealthSummaryView() {
   };
 
   const formatAllergyDisplay = (item: SummaryItem): string => {
-    const isNkda =
-      item.value.toLowerCase().includes("no known drug allergies") ||
-      item.value.toLowerCase().includes("nkda");
+    const isNkda = isNegativeAllergy(item.value);
 
     if (isNkda) {
       const docType = item.document?.doc_type || "medical document";
@@ -640,10 +640,27 @@ export function HealthSummaryView() {
       <div className="flex items-center gap-6 border-b border-slate-200 overflow-x-auto no-scrollbar select-none pt-1">
         {CATEGORY_TABS.map((tab) => {
           const isActive = selectedCategoryTab === tab.id;
-          const count =
-            tab.id === "all"
-              ? items.length
-              : items.filter((i) => i.category === tab.id).length;
+
+          let countDisplay: string | number = 0;
+          if (tab.id === "all") {
+            countDisplay = items.length;
+          } else if (tab.id === "allergy") {
+            const activeCount = items.filter(
+              (i) => i.category === "allergy" && !isNegativeAllergy(i.value)
+            ).length;
+            const hasNkda = items.some(
+              (i) => i.category === "allergy" && isNegativeAllergy(i.value)
+            );
+            if (activeCount > 0) {
+              countDisplay = activeCount;
+            } else if (hasNkda) {
+              countDisplay = "0 (NKDA)";
+            } else {
+              countDisplay = 0;
+            }
+          } else {
+            countDisplay = items.filter((i) => i.category === tab.id).length;
+          }
 
           return (
             <button
@@ -665,7 +682,7 @@ export function HealthSummaryView() {
                     : "text-slate-400 bg-slate-100"
                 )}
               >
-                {count}
+                {countDisplay}
               </span>
               {isActive && (
                 <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-teal-600 rounded-full" />
@@ -747,6 +764,8 @@ export function HealthSummaryView() {
                           {/* Event Records */}
                           <div className="divide-y divide-slate-100">
                             {event.items.map((item) => {
+                              const isNegativeAlg =
+                                item.category === "allergy" && isNegativeAllergy(item.value);
                               const displayValue =
                                 item.category === "allergy"
                                   ? formatAllergyDisplay(item)
@@ -756,11 +775,13 @@ export function HealthSummaryView() {
                                 item.category === "medication"
                                   ? getMedicationPurpose(item.value)
                                   : null;
-                              const CategoryIcon =
-                                CATEGORY_CONFIG[item.category]?.icon || Pill;
-                              const categoryColor =
-                                CATEGORY_CONFIG[item.category]?.color ||
-                                "text-slate-600 bg-slate-50";
+                              const CategoryIcon = isNegativeAlg
+                                ? ShieldCheck
+                                : (CATEGORY_CONFIG[item.category]?.icon || Pill);
+                              const categoryColor = isNegativeAlg
+                                ? "text-emerald-700 bg-emerald-50/80 border-emerald-200"
+                                : (CATEGORY_CONFIG[item.category]?.color ||
+                                  "text-slate-600 bg-slate-50");
 
                               return (
                                 <div
@@ -780,7 +801,11 @@ export function HealthSummaryView() {
                                           "p-1.5 rounded-lg border shrink-0 mt-0.5",
                                           categoryColor
                                         )}
-                                        title={CATEGORY_CONFIG[item.category]?.label}
+                                        title={
+                                          isNegativeAlg
+                                            ? "No Known Drug Allergies (Confirmed Negative)"
+                                            : CATEGORY_CONFIG[item.category]?.label
+                                        }
                                       >
                                         <CategoryIcon className="h-3.5 w-3.5" />
                                       </div>
@@ -973,6 +998,34 @@ export function HealthSummaryView() {
                 const categoryItems = items.filter((i) => i.category === categoryKey);
                 const Icon = config.icon;
 
+                const isAllergyCategory = categoryKey === "allergy";
+                const activeAllergiesCount = categoryItems.filter(
+                  (i) => !isNegativeAllergy(i.value)
+                ).length;
+                const hasNkda = categoryItems.some((i) =>
+                  isNegativeAllergy(i.value)
+                );
+
+                const headerLabel = isAllergyCategory
+                  ? activeAllergiesCount === 0 && hasNkda
+                    ? "0 active allergies (NKDA documented)"
+                    : `${activeAllergiesCount} active ${
+                        activeAllergiesCount === 1 ? "allergy" : "allergies"
+                      }`
+                  : `${categoryItems.length} ${
+                      categoryItems.length === 1 ? "record" : "records"
+                    }`;
+
+                const HeaderIcon =
+                  isAllergyCategory && activeAllergiesCount === 0 && hasNkda
+                    ? ShieldCheck
+                    : Icon;
+
+                const headerColor =
+                  isAllergyCategory && activeAllergiesCount === 0 && hasNkda
+                    ? "text-emerald-700 bg-emerald-50/70 border-emerald-200"
+                    : config.color;
+
                 return (
                   <div
                     key={categoryKey}
@@ -981,13 +1034,13 @@ export function HealthSummaryView() {
                     {/* Section Header */}
                     <div className="bg-slate-50/70 border-b border-slate-100 py-3 px-5 flex items-center justify-between">
                       <div className="flex items-center gap-2.5">
-                        <div className={cn("p-1.5 rounded-lg border", config.color)}>
-                          <Icon className="h-4 w-4" />
+                        <div className={cn("p-1.5 rounded-lg border", headerColor)}>
+                          <HeaderIcon className="h-4 w-4" />
                         </div>
                         <h2 className="text-sm font-semibold text-slate-800">{config.label}</h2>
                       </div>
                       <span className="text-xs text-slate-400 font-medium">
-                        {categoryItems.length} {categoryItems.length === 1 ? "record" : "records"}
+                        {headerLabel}
                       </span>
                     </div>
 
@@ -999,6 +1052,8 @@ export function HealthSummaryView() {
                         </div>
                       ) : (
                         categoryItems.map((item) => {
+                          const isNegativeAlg =
+                            item.category === "allergy" && isNegativeAllergy(item.value);
                           const displayValue =
                             item.category === "allergy"
                               ? formatAllergyDisplay(item)
@@ -1025,9 +1080,16 @@ export function HealthSummaryView() {
                                   {(item.status !== "confirmed" ||
                                     item.source === "patient_entered" ||
                                     item.ocr_check?.state === "disagree" ||
+                                    isNegativeAlg ||
                                     (item.review_reason &&
                                       item.review_reason.includes("OCR"))) && (
                                     <div className="flex items-center gap-2.5 flex-wrap text-xs">
+                                      {isNegativeAlg && (
+                                        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                                          <ShieldCheck className="h-3 w-3 text-emerald-600" />
+                                          Confirmed Negative (NKDA)
+                                        </span>
+                                      )}
                                       {item.status === "needs_review" ? (
                                         <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
                                           <AlertTriangle className="h-3 w-3 text-amber-600" />

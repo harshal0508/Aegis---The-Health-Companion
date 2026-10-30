@@ -424,9 +424,17 @@ export function EmergencyCardManager() {
                         {cat.label}
                       </span>
                       {cat.critical && (
-                        <Badge variant="allergy" className="text-[10px] px-1.5 py-0">
-                          Critical
-                        </Badge>
+                        cat.id === "allergy" &&
+                        (confirmedCounts.allergy_active ?? 0) === 0 &&
+                        (confirmedCounts.allergy_nkda ?? 0) > 0 ? (
+                          <Badge className="bg-emerald-50 text-emerald-800 border-emerald-200 text-[10px] px-1.5 py-0 font-medium">
+                            Confirmed NKDA
+                          </Badge>
+                        ) : (
+                          <Badge variant="allergy" className="text-[10px] px-1.5 py-0">
+                            Critical
+                          </Badge>
+                        )
                       )}
                     </div>
 
@@ -435,6 +443,10 @@ export function EmergencyCardManager() {
                         ? profile?.blood_group ? `Set to ${profile.blood_group}` : "Not set in profile"
                         : cat.id === "emergency_contact"
                         ? profile?.emergency_contact_phone ? `Set to ${profile.emergency_contact_phone}` : "Not set in profile"
+                        : cat.id === "allergy" &&
+                          (confirmedCounts.allergy_active ?? 0) === 0 &&
+                          (confirmedCounts.allergy_nkda ?? 0) > 0
+                        ? "NKDA documented (0 active allergies)"
                         : `${count} confirmed ${count === 1 ? "entry" : "entries"}`}
                     </p>
                   </div>
@@ -685,11 +697,31 @@ export function EmergencyCardManager() {
 
             {/* Allergies: never omitted silently */}
             {selectedCats.includes("allergy") ? (
-              <div className="rounded-xl border border-rose-200 p-4 space-y-2">
-                <span className="text-xs font-bold text-rose-700 uppercase">Allergies:</span>
+              <div
+                className={`rounded-xl border p-4 space-y-2 ${
+                  (confirmedCounts.allergy_active ?? 0) > 0
+                    ? "border-rose-200"
+                    : (confirmedCounts.allergy_nkda ?? 0) > 0
+                    ? "border-emerald-200 bg-emerald-50/10"
+                    : "border-gray-200"
+                }`}
+              >
+                <span
+                  className={`text-xs font-bold uppercase ${
+                    (confirmedCounts.allergy_active ?? 0) > 0
+                      ? "text-rose-700"
+                      : (confirmedCounts.allergy_nkda ?? 0) > 0
+                      ? "text-emerald-800"
+                      : "text-gray-500"
+                  }`}
+                >
+                  Allergies:
+                </span>
                 <p className="text-sm font-semibold text-gray-900">
-                  {confirmedCounts.allergy > 0
-                    ? `${confirmedCounts.allergy} confirmed allergy records will appear here.`
+                  {(confirmedCounts.allergy_active ?? 0) > 0
+                    ? `${confirmedCounts.allergy_active} confirmed allergy records will appear here.`
+                    : (confirmedCounts.allergy_nkda ?? 0) > 0
+                    ? "No known drug allergies (NKDA documented from scan)."
                     : "No allergy information recorded"}
                 </p>
               </div>
