@@ -5,16 +5,6 @@ import { resolveIndianLocality } from "@/lib/advisories/pincode-resolver";
 
 export async function GET(request: Request) {
   try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-      error: authErr,
-    } = await supabase.auth.getUser();
-
-    if (authErr || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     const { searchParams } = new URL(request.url);
     const rawDistrict = searchParams.get("district") || "Indore";
     const resolved = resolveIndianLocality(rawDistrict);
@@ -29,7 +19,7 @@ export async function GET(request: Request) {
       displayName: resolved.displayName,
       count: articles.length,
       articles,
-      source: "Google News RSS / Regional Media Digest",
+      source: "GNews & Regional Media Surveillance",
       disclaimer:
         "Media reports are unverified by clinical authorities. For official notifications, consult district health bulletins.",
     });

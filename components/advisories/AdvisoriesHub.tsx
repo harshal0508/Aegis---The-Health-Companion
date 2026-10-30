@@ -111,6 +111,7 @@ export function AdvisoriesHub({ initialLocality }: AdvisoriesHubProps) {
 
     async function loadNews() {
       setLoadingNews(true);
+      setNewsArticles([]); // Clear immediately so previous city's articles never leak!
       try {
         const queryDistrict = currentLocality.district || currentLocality.city || "Indore";
         const res = await fetch(
@@ -118,12 +119,20 @@ export function AdvisoriesHub({ initialLocality }: AdvisoriesHubProps) {
             currentLocality.pincode
           )}`
         );
+        if (!res.ok) {
+          console.warn("[AdvisoriesHub] Failed to fetch news, status:", res.status);
+          if (isMounted) setNewsArticles([]);
+          return;
+        }
         const data = await res.json();
         if (isMounted && data.articles) {
           setNewsArticles(data.articles);
+        } else if (isMounted) {
+          setNewsArticles([]);
         }
       } catch (e) {
         console.warn("[AdvisoriesHub] Failed to fetch news:", e);
+        if (isMounted) setNewsArticles([]);
       } finally {
         if (isMounted) setLoadingNews(false);
       }

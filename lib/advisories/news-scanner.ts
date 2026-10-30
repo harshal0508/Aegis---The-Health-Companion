@@ -19,11 +19,11 @@ export interface DistrictNewsArticle {
 
 // Comprehensive whitelist: Matches any infectious disease, seasonal outbreak, surge, epidemic, or public health alert
 const COMMUNICABLE_DISEASE_REGEX =
-  /\b(outbreak|epidemic|cases\s+surge|cases\s+rise|cases\s+spike|spurt|(?:cases|infection|infections|fever|disease|patient|patients)\s+surge|spread|spreading|infection|infections|health\s+alert|public\s+health|hospitalized|patients\s+flood|advisory|dengue|malaria|chikungunya|h1n1|swine\s+flu|flu|influenza|viral|fever|cholera|typhoid|jaundice|hepatitis|measles|chickenpox|zika|nipah|leptospirosis|scrub\s+typhus|conjunctivitis|eye\s+flu|gastroenteritis|diarrhea|diarrhoea|food\s+poisoning|pneumonia|rsv|hfmd|hand\s+foot|respiratory|strep|pertussis|rabies|tuberculosis|tb|norovirus|rotavirus|mystery\s+(?:illness|fever|disease))\b/i;
+  /\b(outbreak|epidemic|cases\s+surge|cases\s+rise|cases\s+spike|spurt|(?:cases|infection|infections|fever|disease|patient|patients)\s+surge|spread|spreading|infection|infections|health\s+alert|public\s+health|health\s+advisory|dengue|malaria|chikungunya|h1n1|swine\s+flu|flu|influenza|viral|fever|cholera|typhoid|jaundice|hepatitis|measles|chickenpox|zika|nipah|leptospirosis|scrub\s+typhus|conjunctivitis|eye\s+flu|gastroenteritis|diarrhea|diarrhoea|food\s+poisoning|pneumonia|rsv|hfmd|hand\s+foot|respiratory|strep|pertussis|rabies|tuberculosis|tb|norovirus|rotavirus|mystery\s+(?:illness|fever|disease))\b/i;
 
-// Strict blacklist: Eliminate shopping/business, travel fares, exam admissions, crime, animal sightings, police
+// Strict blacklist: Eliminate shopping/business, travel fares, exam admissions, crime, animal sightings, police, corporate PR, violence
 const IRRELEVANT_CIVIC_REGEX =
-  /\b(snake|animal|leopard|dog|accident|crash|police|murder|theft|scam|corruption|brick|tender|stretcher|bribe|fire|arrest|fraud|protest|assault|dowry|bandage\s+row|traffic|cricket|ipl|movie|film|box\s+office|election|vote|rally|bjp|congress|aap|rape|gang-rape|sexual|burglary|liquor|fir|robbery|shopping|retail|market|bazaar|trader|traders|sales|diwali|festival|fare|fares|ticket|tickets|travel|train|flight|bus|admission|admissions|cat\b|iim\b|iit\b|exam|exams|college|student|students|university|school\s+admission|gold|silver|stock|share\s+price|sensex|nifty)\b/i;
+  /\b(snake|animal|leopard|dog|accident|crash|police|murder|theft|scam|corruption|brick|tender|stretcher|bribe|fire|crossfire|clash|clashes|firing|gunshot|stabbing|brawl|violence|arrest|fraud|protest|assault|dowry|bandage\s+row|traffic|cricket|ipl|movie|film|box\s+office|election|vote|rally|bjp|congress|aap|rape|gang-rape|sexual|burglary|liquor|fir\b|robbery|shopping|retail|market|bazaar|trader|traders|sales|diwali|festival|fare|fares|ticket|tickets|travel|train|flight|bus|admission|admissions|cat\b|iim\b|iit\b|exam|exams|college|student|students|university|school\s+admission|gold|silver|stock|share\s+price|sensex|nifty|platform|integrates|announces|appoints|market\s+size|growth|valuation|expansion|award|awards|inaugurate|startup|fundraising|venture|merger|acquisition)\b/i;
 
 /**
  * Fetch verified district health news via GNews API (if GNEWS_API_KEY is configured),
@@ -91,7 +91,7 @@ export async function fetchGNewsDistrictHealth(
     const query = `"${cleanDistrict}" AND (outbreak OR epidemic OR cases OR infection OR fever OR dengue OR malaria OR alert OR health OR illness OR contamination)`;
     const url = `https://gnews.io/api/v4/search?q=${encodeURIComponent(
       query
-    )}&category=health&lang=en&country=in&max=10&from=${encodeURIComponent(
+    )}&lang=en&country=in&max=10&from=${encodeURIComponent(
       fromDate
     )}&to=${encodeURIComponent(toDate)}&apikey=${apiKey}`;
 
@@ -108,16 +108,27 @@ export async function fetchGNewsDistrictHealth(
     }
 
     const data = await res.json();
+    console.log(`[GNews] Fetched ${data.articles?.length ?? 0} articles for ${cleanDistrict}`);
     if (!data.articles || !Array.isArray(data.articles)) {
       return [];
     }
 
     const results: DistrictNewsArticle[] = [];
+    const seenTitles = new Set<string>();
 
     for (let idx = 0; idx < data.articles.length; idx++) {
       const art = data.articles[idx];
       const title = (art.title || "").trim();
+      const desc = (art.description || "").trim();
       if (!title || IRRELEVANT_CIVIC_REGEX.test(title)) continue;
+
+      // Ensure the article is discussing an infectious illness, outbreak, fever, or public health alert
+      if (!COMMUNICABLE_DISEASE_REGEX.test(title + " " + desc)) continue;
+
+      // Deduplicate duplicate headlines from syndicated PR wires
+      const normalizedTitle = title.toLowerCase().replace(/[^\w]/g, "");
+      if (seenTitles.has(normalizedTitle)) continue;
+      seenTitles.add(normalizedTitle);
 
       const pubDate = art.publishedAt
         ? new Date(art.publishedAt).toISOString().split("T")[0]
