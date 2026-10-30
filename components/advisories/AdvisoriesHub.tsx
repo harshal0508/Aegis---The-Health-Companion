@@ -121,42 +121,48 @@ function getArticleTopicBadge(title: string) {
   if (/dengue|malaria|chikungunya|mosquito|vector/i.test(t)) {
     return {
       label: "Vector Alert",
-      bg: "bg-rose-50 text-rose-700 border-rose-200/90",
       dot: "bg-rose-500",
+      ping: "bg-rose-400",
+      text: "text-rose-700",
     };
   }
   if (/water|diarrh|cholera|contaminat|drink|vomit|borewell|pipeline/i.test(t)) {
     return {
       label: "Water Safety",
-      bg: "bg-cyan-50 text-cyan-800 border-cyan-200/90",
       dot: "bg-cyan-500",
+      ping: "bg-cyan-400",
+      text: "text-cyan-800",
     };
   }
   if (/flu|influenza|h1n1|h3n2|respiratory|cough|pneumonia/i.test(t)) {
     return {
-      label: "Respiratory",
-      bg: "bg-sky-50 text-sky-700 border-sky-200/90",
+      label: "Respiratory Surge",
       dot: "bg-sky-500",
+      ping: "bg-sky-400",
+      text: "text-sky-700",
     };
   }
   if (/eye\s*flu|conjunctivitis/i.test(t)) {
     return {
       label: "Viral Eye Infection",
-      bg: "bg-violet-50 text-violet-700 border-violet-200/90",
       dot: "bg-violet-500",
+      ping: "bg-violet-400",
+      text: "text-violet-700",
     };
   }
   if (/fever|surge|spike|outbreak|epidemic|hospitalized/i.test(t)) {
     return {
       label: "Active Outbreak",
-      bg: "bg-amber-50 text-amber-800 border-amber-200/90",
       dot: "bg-amber-500",
+      ping: "bg-amber-400",
+      text: "text-amber-800",
     };
   }
   return {
     label: "Community Health",
-    bg: "bg-slate-50 text-slate-700 border-slate-200/90",
-    dot: "bg-slate-400",
+    dot: "bg-emerald-500",
+    ping: "bg-emerald-400",
+    text: "text-emerald-700",
   };
 }
 
@@ -711,13 +717,22 @@ export function AdvisoriesHub({
                         </p>
                       </div>
 
-                      {/* Footer: Intelligent Topic Tag & Modern Action Button */}
+                      {/* Footer: Live Radar Signal & Modern Action Button */}
                       <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
-                        <div
-                          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-medium ${topic.bg}`}
-                        >
-                          <span className={`h-1.5 w-1.5 rounded-full ${topic.dot}`} />
-                          <span>{topic.label}</span>
+                        <div className="flex items-center gap-2 select-none py-0.5">
+                          <span className="relative flex h-2 w-2">
+                            <span
+                              className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${topic.ping}`}
+                            />
+                            <span
+                              className={`relative inline-flex rounded-full h-2 w-2 ${topic.dot}`}
+                            />
+                          </span>
+                          <span
+                            className={`text-xs font-semibold tracking-tight ${topic.text}`}
+                          >
+                            {topic.label}
+                          </span>
                         </div>
 
                         <a
