@@ -142,6 +142,10 @@ export function AdvisoriesHub({
   });
 
   const matchedGuidance = matchConfirmedPrecautions(confirmedItems);
+  const activeMonthYear = new Date().toLocaleDateString("en-US", {
+    month: "long",
+    year: "numeric",
+  });
 
   // Sync official IDSP advisories and live district news whenever canonical district changes
   useEffect(() => {
@@ -592,13 +596,14 @@ export function AdvisoriesHub({
                 <Newspaper className="h-4 w-4 text-amber-700" />
                 <span>Real-Time Local Media Surveillance for {currentLocality.district}</span>
               </div>
-              <span className="text-[11px] font-semibold bg-amber-100/90 text-amber-900 px-2.5 py-0.5 rounded-full border border-amber-300/80">
-                This Month • Decreasing Order (Newest First)
-              </span>
+              <div className="flex items-center gap-1.5 text-xs text-slate-700 bg-white/90 border border-slate-200/90 px-3 py-1 rounded-xl shadow-2xs font-medium">
+                <Calendar className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                <span className="font-semibold text-slate-900">{activeMonthYear}</span>
+              </div>
             </div>
             <p className="leading-relaxed">
               These articles are scanned live from regional newspapers covering health developments in{" "}
-              <strong>{currentLocality.district} and surrounding blocks</strong>. Filtered strictly for the active month and ordered from the latest date down to the 1st of the month.
+              <strong>{currentLocality.district} and surrounding blocks</strong> during {activeMonthYear}, ordered from the latest reports down to the first of the month.
             </p>
           </div>
 
