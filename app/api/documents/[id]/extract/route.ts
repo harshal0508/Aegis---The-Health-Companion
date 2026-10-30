@@ -165,44 +165,108 @@ export async function POST(
     for (const page of pages) {
 
       // Download page file from Supabase private storage
-      // Supports both {account_id}/{patient_id}/{doc_id}/page-n and legacy {user_id}/{doc_id}/page-n
-      const ext = document.storage_path.endsWith(".pdf") ? "pdf" : "jpg";
-      const candidatePaths = [
-        document.storage_path && !document.storage_path.endsWith(".pdf") && !document.storage_path.endsWith(".jpg")
-          ? `${document.storage_path}/page-${page.page_no}.${ext}`
-          : null,
-        `${user.id}/${document.patient_id || user.id}/${documentId}/page-${page.page_no}.${ext}`,
-        `${user.id}/${documentId}/page-${page.page_no}.${ext}`,
-        document.storage_path,
-      ].filter(Boolean) as string[];
+      // Supports both {account_id}/{patient_id}/{doc_id}/page-n and legacy {user_id}/{doc_id}/page-n across all extensions (PDF, JPG, PNG, WEBP)
+      const patientFolder = document.patient_id
+        ? `${user.id}/${document.patient_id}/${documentId}`
+        : null;
+      const legacyFolder = `${user.id}/${documentId}`;
+      const docStoragePath = document.storage_path?.trim();
+
+      const candidateFolders = [patientFolder, docStoragePath, legacyFolder].filter(
+        Boolean
+      ) as string[];
 
       let activeBlob: any = null;
-      for (const p of candidatePaths) {
-        const { data: b } = await supabase.storage.from("medical-records").download(p);
-        if (b) {
-          activeBlob = b;
-          break;
+      let matchedPath = "";
+
+      // 1. Try listing files in candidate folders to find the exact filename (e.g. page-1.pdf, page-1.jpg, page-1.png)
+      for (const folder of candidateFolders) {
+        const { data: storageFiles } = await supabase.storage
+          .from("medical-records")
+          .list(folder);
+
+        if (storageFiles && storageFiles.length > 0) {
+          const prefix = `page-${page.page_no}.`;
+          const matchedFile = storageFiles.find((f) =>
+            f.name.toLowerCase().startsWith(prefix)
+          );
+          if (matchedFile) {
+            const fullPath = `${folder}/${matchedFile.name}`;
+            const { data: b } = await supabase.storage
+              .from("medical-records")
+              .download(fullPath);
+            if (b) {
+              activeBlob = b;
+              matchedPath = fullPath;
+              break;
+            }
+          }
+        }
+      }
+
+      // 2. Direct fallback across common extensions if listing was restricted or unavailable
+      if (!activeBlob) {
+        const extensions = ["pdf", "jpg", "jpeg", "png", "webp"];
+        const fallbackPaths: string[] = [];
+        for (const folder of candidateFolders) {
+          for (const ext of extensions) {
+            fallbackPaths.push(`${folder}/page-${page.page_no}.${ext}`);
+          }
+        }
+        if (docStoragePath && (docStoragePath.endsWith(".pdf") || docStoragePath.endsWith(".jpg"))) {
+          fallbackPaths.push(docStoragePath);
+        }
+
+        for (const p of fallbackPaths) {
+          const { data: b } = await supabase.storage
+            .from("medical-records")
+            .download(p);
+          if (b) {
+            activeBlob = b;
+            matchedPath = p;
+            break;
+          }
         }
       }
 
       if (!activeBlob) {
-        throw new Error(`Failed to load page image for page ${page.page_no}`);
+        console.error(
+          `[ExtractRoute] Failed to load file for page ${page.page_no}. Storage path: ${document.storage_path}`
+        );
+        throw new Error(`Failed to load page file for page ${page.page_no}`);
       }
-      if (!activeBlob) continue;
 
       const arrayBuffer = await activeBlob.arrayBuffer();
       const base64 = Buffer.from(arrayBuffer).toString("base64");
       const imageBuffer = Buffer.from(arrayBuffer);
-      const mimeType = activeBlob.type || (ext === "pdf" ? "application/pdf" : "image/jpeg");
 
-      // Run Primary Vision Perception (Gemini) and Secondary OCR (Tesseract) concurrently
+      const isPdf =
+        matchedPath.toLowerCase().endsWith(".pdf") ||
+        activeBlob.type === "application/pdf" ||
+        document.doc_type === "pdf";
+
+      const mimeType = isPdf
+        ? "application/pdf"
+        : activeBlob.type && activeBlob.type.startsWith("image/")
+        ? activeBlob.type
+        : "image/jpeg";
+
+      // Run Primary Vision Perception (Gemini) and Secondary OCR (Tesseract)
+      // Note: Tesseract processes raster images (JPEG/PNG). For PDFs, Gemini vision provides the primary verbatim OCR.
       let extractionResult: any = null;
       let secondaryOcrResult: TesseractResult | null = null;
 
-      const [geminiSettled, ocrSettled] = await Promise.allSettled([
+      const perceptionPromises: Promise<any>[] = [
         provider.extractPage(base64, mimeType, page.page_no),
-        ocrPage(imageBuffer),
-      ]);
+      ];
+
+      if (!isPdf) {
+        perceptionPromises.push(ocrPage(imageBuffer));
+      }
+
+      const settledResults = await Promise.allSettled(perceptionPromises);
+      const geminiSettled = settledResults[0];
+      const ocrSettled = settledResults[1];
 
       if (geminiSettled.status === "fulfilled") {
         extractionResult = geminiSettled.value;
@@ -211,9 +275,9 @@ export async function POST(
         console.warn("[ExtractRoute] Primary Gemini perception warning:", primaryError);
       }
 
-      if (ocrSettled.status === "fulfilled") {
+      if (ocrSettled && ocrSettled.status === "fulfilled") {
         secondaryOcrResult = ocrSettled.value;
-      } else {
+      } else if (ocrSettled) {
         console.warn("[ExtractRoute] Secondary OCR warning:", ocrSettled.reason?.message);
       }
 
@@ -462,6 +526,7 @@ export async function POST(
       warning: primaryError ? `Note: ${primaryError}` : undefined,
     });
   } catch (err: any) {
+    console.error("[ExtractRoute Error]", err);
     return NextResponse.json(
       { error: err.message || "Extraction process failed" },
       { status: 500 }
