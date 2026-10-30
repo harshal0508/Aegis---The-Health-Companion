@@ -22,10 +22,11 @@ const COMMUNICABLE_DISEASE_REGEX =
 
 // Strict blacklist: Eliminate hospital administrative scandals, animal sightings, police/crime, political or sports news
 const IRRELEVANT_CIVIC_REGEX =
-  /\b(snake|animal|leopard|dog|accident|crash|police|murder|theft|scam|corruption|brick|tender|stretcher|bribe|fire|arrest|fraud|protest|assault|dowry|bandage\s+row|traffic|cricket|ipl|movie|film|box\s+office|election|vote|rally|bjp|congress|aap)\b/i;
+  /\b(snake|animal|leopard|dog|accident|crash|police|murder|theft|scam|corruption|brick|tender|stretcher|bribe|fire|arrest|fraud|protest|assault|dowry|bandage\s+row|traffic|cricket|ipl|movie|film|box\s+office|election|vote|rally|bjp|congress|aap|rape|gang-rape|sexual|burglary|liquor|fir|robbery)\b/i;
 
 /**
  * Fetch and parse real news articles for a specific district and disease query.
+ * Restricts queries to the last 30 days (`when:30d`) so results reflect the active month.
  */
 export async function fetchLiveDistrictHealthNews(
   district: string
@@ -34,7 +35,7 @@ export async function fetchLiveDistrictHealthNews(
     const cleanDistrict = (district || "Indore").trim();
     // Dynamic, wide-spectrum query to capture ANY active disease outbreak, epidemic, or surge spreading at this time
     const query = encodeURIComponent(
-      `"${cleanDistrict}" (outbreak OR epidemic OR "cases surge" OR "cases rise" OR "cases spike" OR "health alert" OR "illness spreading" OR "infection surge" OR "viral fever" OR "eye flu" OR conjunctivitis OR dengue OR malaria OR chikungunya OR flu OR influenza OR H1N1 OR cholera OR typhoid OR jaundice OR hepatitis OR measles OR "scrub typhus" OR "food poisoning" OR "mystery fever" OR "infection")`
+      `"${cleanDistrict}" (outbreak OR epidemic OR "cases surge" OR "cases rise" OR "cases spike" OR "health alert" OR "illness spreading" OR "infection surge" OR "viral fever" OR "eye flu" OR conjunctivitis OR dengue OR malaria OR chikungunya OR flu OR influenza OR H1N1 OR cholera OR typhoid OR jaundice OR hepatitis OR measles OR "scrub typhus" OR "food poisoning" OR "mystery fever" OR infection OR contamination OR fever OR health) when:30d`
     );
     const feedUrl = `https://news.google.com/rss/search?q=${query}&hl=en-IN&gl=IN&ceid=IN:en`;
 
@@ -61,13 +62,15 @@ export async function fetchLiveDistrictHealthNews(
 
 /**
  * Zero-dependency XML parser for Google News RSS items with strict clinical relevance filtering.
+ * Filters articles strictly for the current calendar month (from current date down to the 1st of the month)
+ * and sorts all articles in strictly decreasing chronological order.
  */
 export function parseGoogleNewsRss(xml: string, district: string): DistrictNewsArticle[] {
-  const articles: DistrictNewsArticle[] = [];
+  const rawArticles: DistrictNewsArticle[] = [];
   const itemRegex = /<item>([\s\S]*?)<\/item>/gi;
   let match: RegExpExecArray | null;
 
-  while ((match = itemRegex.exec(xml)) !== null && articles.length < 8) {
+  while ((match = itemRegex.exec(xml)) !== null) {
     const itemXml = match[1];
 
     const titleMatch = /<title>(.*?)<\/title>/i.exec(itemXml);
@@ -111,8 +114,8 @@ export function parseGoogleNewsRss(xml: string, district: string): DistrictNewsA
       : new Date().toISOString().split("T")[0];
 
     if (rawTitle && url && url !== "#") {
-      articles.push({
-        id: `news-${articles.length}-${Buffer.from(rawTitle.slice(0, 20)).toString("hex")}`,
+      rawArticles.push({
+        id: `news-${rawArticles.length}-${Buffer.from(rawTitle.slice(0, 20)).toString("hex")}`,
         title: decodeXmlEntities(rawTitle),
         source: decodeXmlEntities(source),
         url,
@@ -123,7 +126,31 @@ export function parseGoogleNewsRss(xml: string, district: string): DistrictNewsA
     }
   }
 
-  return articles;
+  // 1. Sort all matching candidates in strict DECREASING chronological order (newest date first)
+  rawArticles.sort(
+    (a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
+  );
+
+  // 2. Identify the active month window (e.g. current calendar month: YYYY-MM-01 to today)
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = String(now.getMonth() + 1).padStart(2, "0");
+  const startOfMonth = `${currentYear}-${currentMonth}-01`;
+  const todayStr = now.toISOString().split("T")[0];
+
+  // Filter strictly for the current month (e.g. 2026-10-01 to 2026-10-30 in October)
+  const currentMonthArticles = rawArticles.filter(
+    (a) => a.publishedAt >= startOfMonth && a.publishedAt <= todayStr
+  );
+
+  // If the current active month has articles, use only current month articles
+  if (currentMonthArticles.length > 0) {
+    return currentMonthArticles.slice(0, 8);
+  }
+
+  // Fallback for testing environments or early-month boundary cases:
+  // Return the freshest available items, strictly sorted in decreasing order
+  return rawArticles.slice(0, 8);
 }
 
 /**

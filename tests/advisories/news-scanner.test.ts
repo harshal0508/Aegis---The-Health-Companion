@@ -22,7 +22,7 @@ describe("Live District News Scanner & Clinical Relevance Filters", () => {
           <item>
             <title>H1N1-Linked Death In Madhya Pradesh Sparks Probe At Indore Hospital - NDTV</title>
             <link>https://news.google.com/articles/h1n1-indore</link>
-            <pubDate>Fri, 21 Aug 2026 10:00:00 GMT</pubDate>
+            <pubDate>Thu, 15 Oct 2026 10:00:00 GMT</pubDate>
             <source>NDTV</source>
           </item>
           <item>
@@ -161,5 +161,63 @@ describe("Live District News Scanner & Clinical Relevance Filters", () => {
 
     const dengueArticle = articles.find((a) => a.title.includes("Dengue"));
     expect(dengueArticle?.snippet).toContain("vector-borne");
+  });
+
+  it("filters strictly for current month (Oct 2026) and sorts in decreasing order (newest to oldest)", () => {
+    const multiDateXml = `
+      <rss version="2.0">
+        <channel>
+          <item>
+            <title>Dengue cases up 90% in district in a year - The Times of India</title>
+            <link>https://news.google.com/articles/dengue-jan</link>
+            <pubDate>Wed, 14 Jan 2026 08:00:00 GMT</pubDate>
+            <source>The Times of India</source>
+          </item>
+          <item>
+            <title>Dehydration, heatstroke cases rise in Indore - The Times of India</title>
+            <link>https://news.google.com/articles/heatstroke-may</link>
+            <pubDate>Fri, 15 May 2026 08:00:00 GMT</pubDate>
+            <source>The Times of India</source>
+          </item>
+          <item>
+            <title>Indore water contamination: Audit report links 15 deaths to outbreak in Bhagirathpura - The Hindu</title>
+            <link>https://news.google.com/articles/water-oct1</link>
+            <pubDate>Thu, 01 Oct 2026 08:00:00 GMT</pubDate>
+            <source>The Hindu</source>
+          </item>
+          <item>
+            <title>Chemical leak on road triggers health scare and respiratory alert - Indiatimes</title>
+            <link>https://news.google.com/articles/leak-oct6</link>
+            <pubDate>Tue, 06 Oct 2026 07:00:00 GMT</pubDate>
+            <source>Indiatimes</source>
+          </item>
+          <item>
+            <title>Pune Dengue Cases Reach 2,413 as Civic Action Rises - Urban Acres</title>
+            <link>https://news.google.com/articles/dengue-oct29</link>
+            <pubDate>Thu, 29 Oct 2026 08:00:00 GMT</pubDate>
+            <source>Urban Acres</source>
+          </item>
+          <item>
+            <title>PMC steps up dengue response as state cases rise 28% - The Times of India</title>
+            <link>https://news.google.com/articles/dengue-oct27</link>
+            <pubDate>Tue, 27 Oct 2026 08:00:00 GMT</pubDate>
+            <source>The Times of India</source>
+          </item>
+        </channel>
+      </rss>
+    `;
+
+    const articles = parseGoogleNewsRss(multiDateXml, "Indore");
+
+    // Must strictly exclude Jan and May 2026 articles because Oct 2026 articles exist!
+    expect(articles.every((a) => a.publishedAt.startsWith("2026-10"))).toBe(true);
+    expect(articles.length).toBe(4);
+
+    // Must be in strict DECREASING chronological order:
+    // Oct 29 -> Oct 27 -> Oct 06 -> Oct 01
+    expect(articles[0].publishedAt).toBe("2026-10-29");
+    expect(articles[1].publishedAt).toBe("2026-10-27");
+    expect(articles[2].publishedAt).toBe("2026-10-06");
+    expect(articles[3].publishedAt).toBe("2026-10-01");
   });
 });

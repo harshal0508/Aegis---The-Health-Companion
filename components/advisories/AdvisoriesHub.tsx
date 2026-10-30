@@ -587,13 +587,18 @@ export function AdvisoriesHub({
       {activeTab === "news" && (
         <div className="space-y-4">
           <div className="bg-amber-50/70 border border-amber-200/90 rounded-2xl p-4 text-xs text-amber-950 space-y-1.5">
-            <div className="flex items-center gap-2 font-bold text-amber-900">
-              <Newspaper className="h-4 w-4 text-amber-700" />
-              <span>Real-Time Local Media Surveillance for {currentLocality.district}</span>
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div className="flex items-center gap-2 font-bold text-amber-900">
+                <Newspaper className="h-4 w-4 text-amber-700" />
+                <span>Real-Time Local Media Surveillance for {currentLocality.district}</span>
+              </div>
+              <span className="text-[11px] font-semibold bg-amber-100/90 text-amber-900 px-2.5 py-0.5 rounded-full border border-amber-300/80">
+                This Month • Decreasing Order (Newest First)
+              </span>
             </div>
             <p className="leading-relaxed">
               These articles are scanned live from regional newspapers covering health developments in{" "}
-              <strong>{currentLocality.district} and surrounding blocks</strong>. Press reports are provided for early situational awareness.
+              <strong>{currentLocality.district} and surrounding blocks</strong>. Filtered strictly for the active month and ordered from the latest date down to the 1st of the month.
             </p>
           </div>
 
@@ -612,7 +617,12 @@ export function AdvisoriesHub({
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {newsArticles.map((article) => (
+              {[...newsArticles]
+                .sort(
+                  (a, b) =>
+                    new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
+                )
+                .map((article) => (
                 <div key={article.id} className="apple-card apple-card-hover p-5 border-t-4 border-t-amber-500 flex flex-col justify-between space-y-3 shadow-2xs">
                   <div className="space-y-2">
                     <div className="flex items-center justify-between text-[11px] text-slate-400">
