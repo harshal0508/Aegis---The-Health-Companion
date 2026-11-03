@@ -1,10 +1,18 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
   parseGoogleNewsRss,
   fetchLiveDistrictHealthNews,
 } from "@/lib/advisories/news-scanner";
 
 describe("Live District News Scanner & Clinical Relevance Filters", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-31T12:00:00Z"));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
   it("exports fetchLiveDistrictHealthNews function", () => {
     expect(typeof fetchLiveDistrictHealthNews).toBe("function");
   });
