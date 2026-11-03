@@ -108,7 +108,6 @@ export async function fetchGNewsDistrictHealth(
     }
 
     const data = await res.json();
-    console.log(`[GNews] Fetched ${data.articles?.length ?? 0} articles for ${cleanDistrict}`);
     if (!data.articles || !Array.isArray(data.articles)) {
       return [];
     }
