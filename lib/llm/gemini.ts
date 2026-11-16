@@ -33,6 +33,13 @@ interface ExtractionPayload {
   }>;
 }
 
+// Ordered fallback chain: primary first, then fallbacks tried on 503/overload
+const GEMINI_MODEL_FALLBACK_CHAIN = [
+  "gemini-3.8-flash",
+  "gemini-2.5-flash",
+  "gemini-1.5-flash-002",
+];
+
 export class GeminiProvider implements LLMProvider {
   private apiKey: string;
   private model: string;
@@ -44,9 +51,8 @@ export class GeminiProvider implements LLMProvider {
       .trim()
       .replace(/^models\//, "");
 
-    // Proactively normalize retired/deprecated models to active standard
+    // Proactively normalize fully-retired/removed models to primary active model
     const retiredModels = [
-      "gemini-2.5-flash",
       "gemini-2.0-flash",
       "gemini-2.0-flash-exp",
       "gemini-1.5-flash",
@@ -191,75 +197,100 @@ CRITICAL RULES:
     };
 
     let response: Response | null = null;
-    let attempts = 0;
-    const maxAttempts = 3; // 1 initial attempt + max 2 retries on 503/500
-    let delayMs = 2000;
 
-    while (attempts < maxAttempts) {
-      attempts++;
-      try {
-        response = await fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-          signal: AbortSignal.timeout(60000), // 60s timeout for complex clinical extractions
-        });
+    // Model fallback chain: on persistent 503/overload, cascade to next model
+    const modelChain = (() => {
+      const chain = [...GEMINI_MODEL_FALLBACK_CHAIN];
+      const startIdx = chain.indexOf(this.model);
+      // If current model is in chain, start from it; otherwise prepend it
+      return startIdx >= 0 ? chain.slice(startIdx) : [this.model, ...chain];
+    })();
 
-        if (response.ok) {
-          break;
-        }
+    for (let modelIdx = 0; modelIdx < modelChain.length; modelIdx++) {
+      const candidateModel = modelChain[modelIdx];
+      this.model = candidateModel;
+      url = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${this.apiKey}`;
 
-        // Auto-recover if model does not support thinkingConfig (400 Bad Request)
-        if (response.status === 400) {
-          const errText = await response.text();
-          if (
-            (errText.includes("thinkingConfig") || errText.includes("thinkingBudget")) &&
-            (body.generationConfig as any)?.thinkingConfig
-          ) {
-            console.warn("[GeminiProvider] Model does not support thinkingConfig; retrying without it...");
-            delete (body.generationConfig as any).thinkingConfig;
-            continue;
+      let attempts = 0;
+      const maxAttempts = 2; // 1 initial + 1 retry per model before cascading
+      let delayMs = 2000;
+      let modelFailed = false;
+
+      while (attempts < maxAttempts) {
+        attempts++;
+        try {
+          response = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+            signal: AbortSignal.timeout(60000), // 60s timeout for complex clinical extractions
+          });
+
+          if (response.ok) {
+            break;
           }
 
-          let errMsg = `Gemini API request failed with status 400`;
-          try {
-            const parsed = JSON.parse(errText);
-            if (parsed.error?.message) errMsg += `: ${parsed.error.message}`;
-          } catch {
-            errMsg += `: ${errText}`;
-          }
-          throw new Error(errMsg);
-        }
+          // Auto-recover if model does not support thinkingConfig (400 Bad Request)
+          if (response.status === 400) {
+            const errText = await response.text();
+            if (
+              (errText.includes("thinkingConfig") || errText.includes("thinkingBudget")) &&
+              (body.generationConfig as any)?.thinkingConfig
+            ) {
+              console.warn("[GeminiProvider] Model does not support thinkingConfig; retrying without it...");
+              delete (body.generationConfig as any).thinkingConfig;
+              continue;
+            }
 
-        // Do NOT retry on 429 (rate limit / quota exceeded) — abort immediately so we don't burn requests
-        if (response.status === 429) {
-          const errText = await response.text();
-          let errMsg = `Gemini API request failed with status 429 (Quota Exceeded)`;
-          try {
-            const parsed = JSON.parse(errText);
-            if (parsed.error?.message) errMsg += `: ${parsed.error.message}`;
-          } catch {
-            errMsg += `: ${errText}`;
+            let errMsg = `Gemini API request failed with status 400`;
+            try {
+              const parsed = JSON.parse(errText);
+              if (parsed.error?.message) errMsg += `: ${parsed.error.message}`;
+            } catch {
+              errMsg += `: ${errText}`;
+            }
+            throw new Error(errMsg);
           }
-          throw new Error(errMsg);
-        }
 
-        // Auto-recover from retired / unavailable Gemini models (e.g. 404 "no longer available")
-        if (response.status === 404) {
-          const errText = await response.text();
-          if (
-            (errText.includes("no longer available") || errText.includes("not found")) &&
-            this.model !== "gemini-3.8-flash"
-          ) {
+          // Do NOT retry on 429 (rate limit / quota exceeded) — abort immediately
+          if (response.status === 429) {
+            const errText = await response.text();
+            let errMsg = `Gemini API request failed with status 429 (Quota Exceeded)`;
+            try {
+              const parsed = JSON.parse(errText);
+              if (parsed.error?.message) errMsg += `: ${parsed.error.message}`;
+            } catch {
+              errMsg += `: ${errText}`;
+            }
+            throw new Error(errMsg);
+          }
+
+          // 404 retired model → try next in chain
+          if (response.status === 404) {
             console.warn(
-              `[GeminiProvider] Model '${this.model}' is unavailable/retired. Automatically falling back to 'gemini-3.8-flash'...`
+              `[GeminiProvider] Model '${this.model}' returned 404 (retired/unavailable). Cascading to next fallback...`
             );
-            this.model = "gemini-3.8-flash";
-            url = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${this.apiKey}`;
-            continue;
+            modelFailed = true;
+            break;
           }
 
-          let errMsg = `Gemini API request failed with status 404`;
+          // 503 / 5xx: retry once within this model, then cascade to next fallback
+          if (response.status === 503 || response.status >= 500) {
+            if (attempts < maxAttempts) {
+              await new Promise((resolve) => setTimeout(resolve, delayMs));
+              delayMs *= 2;
+              continue;
+            }
+            // Exhausted retries for this model → cascade to next
+            console.warn(
+              `[GeminiProvider] Model '${this.model}' returned ${response.status} after ${attempts} attempt(s). Cascading to next fallback...`
+            );
+            modelFailed = true;
+            break;
+          }
+
+          const errText = await response.text();
+          let errMsg = `Gemini API request failed with status ${response.status}`;
           try {
             const parsed = JSON.parse(errText);
             if (parsed.error?.message) errMsg += `: ${parsed.error.message}`;
@@ -267,40 +298,40 @@ CRITICAL RULES:
             errMsg += `: ${errText}`;
           }
           throw new Error(errMsg);
-        }
-
-        // Retry ONLY on transient 503 (high demand) or >= 500 server error, at most 2 retries
-        if (
-          (response.status === 503 || response.status >= 500) &&
-          attempts < maxAttempts
-        ) {
+        } catch (err: any) {
+          // Do NOT retry on timeout (AbortError) or quota errors — surface immediately
+          if (err?.name === "AbortError" || err?.name === "TimeoutError" || err?.message?.includes("429")) {
+            throw err;
+          }
+          if (attempts >= maxAttempts) {
+            // Network-level failure after retries → cascade to next model
+            console.warn(
+              `[GeminiProvider] Model '${this.model}' network error after ${attempts} attempt(s): ${err?.message}. Cascading...`
+            );
+            modelFailed = true;
+            break;
+          }
           await new Promise((resolve) => setTimeout(resolve, delayMs));
           delayMs *= 2;
-          continue;
         }
-
-        const errText = await response.text();
-        let errMsg = `Gemini API request failed with status ${response.status}`;
-        try {
-          const parsed = JSON.parse(errText);
-          if (parsed.error?.message) errMsg += `: ${parsed.error.message}`;
-        } catch {
-          errMsg += `: ${errText}`;
-        }
-        throw new Error(errMsg);
-      } catch (err: any) {
-        // Do NOT retry on timeout (AbortError) or quota errors — surface immediately
-        if (err?.name === "AbortError" || err?.name === "TimeoutError" || err?.message?.includes("429")) {
-          throw err;
-        }
-        if (attempts >= maxAttempts) throw err;
-        await new Promise((resolve) => setTimeout(resolve, delayMs));
-        delayMs *= 2;
       }
+
+      // If this model succeeded (response.ok), exit the model fallback loop
+      if (!modelFailed && response && response.ok) {
+        break;
+      }
+
+      // If last model in chain also failed, throw
+      if (modelIdx === modelChain.length - 1) {
+        throw new Error(
+          `All Gemini models in fallback chain (${modelChain.join(" → ")}) are unavailable or overloaded. Please try again later.`
+        );
+      }
+      // Otherwise continue to next model in chain
     }
 
     if (!response || !response.ok) {
-      throw new Error("Failed to receive a valid response from Gemini after retries.");
+      throw new Error("Failed to receive a valid response from Gemini after model fallback.");
     }
 
     const json: GeminiApiResponse = await response.json();
