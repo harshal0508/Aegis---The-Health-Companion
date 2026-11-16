@@ -6,6 +6,7 @@ import { ocrPage, type TesseractResult } from "@/lib/ocr/tesseract";
 import { crossCheckItem } from "@/lib/extraction/crosscheck";
 import { locateQuoteBoundingBoxes } from "@/lib/extraction/locator";
 import { matchPatientIdentity } from "@/lib/extraction/identity-matcher";
+import sharp from "sharp";
 
 // Daily extraction page cap per user (configurable via DAILY_PAGE_CAP).
 // In development, default to generous cap (500 pages) so testing is never blocked.
@@ -15,7 +16,7 @@ const DAILY_PAGE_CAP =
     : parseInt(process.env.DAILY_PAGE_CAP || "50", 10);
 
 // Extend Vercel serverless function execution limit for extraction
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 export async function POST(
   request: Request,
@@ -240,13 +241,27 @@ export async function POST(
       }
 
       const arrayBuffer = await activeBlob.arrayBuffer();
-      const base64 = Buffer.from(arrayBuffer).toString("base64");
       const imageBuffer = Buffer.from(arrayBuffer);
 
       const isPdf =
         matchedPath.toLowerCase().endsWith(".pdf") ||
         activeBlob.type === "application/pdf" ||
         document.doc_type === "pdf";
+
+      // For raster image scans, optimize payload size (max 2048px width, quality 85) to accelerate vision upload
+      let visionBuffer = imageBuffer;
+      if (!isPdf && imageBuffer.length > 800 * 1024) {
+        try {
+          visionBuffer = await sharp(imageBuffer)
+            .resize({ width: 2048, withoutEnlargement: true })
+            .jpeg({ quality: 85 })
+            .toBuffer();
+        } catch {
+          visionBuffer = imageBuffer;
+        }
+      }
+
+      const base64 = visionBuffer.toString("base64");
 
       const mimeType = isPdf
         ? "application/pdf"

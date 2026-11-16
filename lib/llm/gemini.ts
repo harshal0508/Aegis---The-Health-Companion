@@ -184,6 +184,9 @@ CRITICAL RULES:
         responseMimeType: "application/json",
         responseSchema,
         temperature: 0.1,
+        thinkingConfig: {
+          thinkingBudget: 0,
+        },
       },
     };
 
@@ -199,11 +202,33 @@ CRITICAL RULES:
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
-          signal: AbortSignal.timeout(45000), // 45s timeout so it cleanly resolves within serverless limits
+          signal: AbortSignal.timeout(60000), // 60s timeout for complex clinical extractions
         });
 
         if (response.ok) {
           break;
+        }
+
+        // Auto-recover if model does not support thinkingConfig (400 Bad Request)
+        if (response.status === 400) {
+          const errText = await response.text();
+          if (
+            (errText.includes("thinkingConfig") || errText.includes("thinkingBudget")) &&
+            (body.generationConfig as any)?.thinkingConfig
+          ) {
+            console.warn("[GeminiProvider] Model does not support thinkingConfig; retrying without it...");
+            delete (body.generationConfig as any).thinkingConfig;
+            continue;
+          }
+
+          let errMsg = `Gemini API request failed with status 400`;
+          try {
+            const parsed = JSON.parse(errText);
+            if (parsed.error?.message) errMsg += `: ${parsed.error.message}`;
+          } catch {
+            errMsg += `: ${errText}`;
+          }
+          throw new Error(errMsg);
         }
 
         // Do NOT retry on 429 (rate limit / quota exceeded) — abort immediately so we don't burn requests
