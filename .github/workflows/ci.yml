@@ -25,7 +25,11 @@ jobs:
       - name: Start local Supabase
         # Captures the output (anon_key, service_role_key) for subsequent steps
         id: supabase
-        run: supabase start
+        run: |
+          supabase start
+          eval $(supabase status -o env)
+          echo "anon_key=$ANON_KEY" >> "$GITHUB_OUTPUT"
+          echo "service_role_key=$SERVICE_ROLE_KEY" >> "$GITHUB_OUTPUT"
 
       - name: Setup Node.js
         uses: actions/setup-node@v4

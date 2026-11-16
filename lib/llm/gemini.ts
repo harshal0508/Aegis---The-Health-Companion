@@ -199,7 +199,7 @@ CRITICAL RULES:
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
-          signal: AbortSignal.timeout(60000), // 60s timeout — Gemini can be slow on large images
+          signal: AbortSignal.timeout(45000), // 45s timeout so it cleanly resolves within serverless limits
         });
 
         if (response.ok) {

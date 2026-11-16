@@ -14,6 +14,9 @@ const DAILY_PAGE_CAP =
     ? 500
     : parseInt(process.env.DAILY_PAGE_CAP || "50", 10);
 
+// Extend Vercel serverless function execution limit for extraction
+export const maxDuration = 60;
+
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -261,7 +264,12 @@ export async function POST(
       ];
 
       if (!isPdf) {
-        perceptionPromises.push(ocrPage(imageBuffer));
+        perceptionPromises.push(
+          ocrPage(imageBuffer, { timeoutMs: 12000 }).catch((err) => {
+            console.warn("[ExtractRoute] Secondary OCR caught error:", err?.message || err);
+            return null;
+          })
+        );
       }
 
       const settledResults = await Promise.allSettled(perceptionPromises);
@@ -275,10 +283,13 @@ export async function POST(
         console.warn("[ExtractRoute] Primary Gemini perception warning:", primaryError);
       }
 
-      if (ocrSettled && ocrSettled.status === "fulfilled") {
+      if (ocrSettled && ocrSettled.status === "fulfilled" && ocrSettled.value) {
         secondaryOcrResult = ocrSettled.value;
       } else if (ocrSettled) {
-        console.warn("[ExtractRoute] Secondary OCR warning:", ocrSettled.reason?.message);
+        console.warn(
+          "[ExtractRoute] Secondary OCR warning:",
+          (ocrSettled as any).reason?.message || "Secondary OCR unavailable"
+        );
       }
 
       // If both readers failed, throw error so user is notified

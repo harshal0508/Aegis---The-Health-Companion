@@ -69,6 +69,23 @@ const TESSERACT_LANG_PATH: string | undefined = (() => {
 })();
 
 /**
+ * Checks if tesseract-core wasm binaries are present on the filesystem.
+ * In serverless deployments (e.g. AWS Lambda / Vercel), if wasm binaries are not
+ * packaged, this check fails gracefully rather than triggering an uncatchable
+ * RuntimeError: Aborted in worker threads.
+ */
+export function isTesseractWasmAvailable(): boolean {
+  try {
+    const corePkg = require.resolve("tesseract.js-core/package.json");
+    const coreDir = path.dirname(corePkg);
+    const files = fs.readdirSync(coreDir);
+    return files.some((f) => f.endsWith(".wasm"));
+  } catch {
+    return false;
+  }
+}
+
+/**
  * No-op: the stateless Tesseract.recognize() API spawns a fresh worker per
  * call and cleans it up automatically, so there is no persistent instance to
  * terminate. This export is kept for backwards-compatibility with eval scripts.
@@ -126,7 +143,9 @@ export async function ocrPage(
   imageBuffer: Buffer,
   options: OcrOptions = { useCache: true }
 ): Promise<TesseractResult> {
-  const timeoutMs = options.timeoutMs ?? 60000; // 60s — preprocessing + OCR on large scans can take 30–50s
+  const timeoutMs =
+    options.timeoutMs ??
+    (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME ? 15000 : 60000);
   return Promise.race([
     runOcrPage(imageBuffer, options),
     new Promise<TesseractResult>((_, reject) =>
@@ -168,12 +187,22 @@ async function runOcrPage(
   const imgW = preprocessed.width;
   const imgH = preprocessed.height;
 
-  // 4. Run Tesseract Worker with explicit blocks output format enabled.
-  // In Tesseract.js v5+, blocks/words/bboxes are only returned when requested via { blocks: true }.
-  const worker = await Tesseract.createWorker("eng", 1, {
+  // 4. Verify WASM availability before launching Tesseract worker to avoid unhandled RuntimeError aborts
+  if (!isTesseractWasmAvailable()) {
+    throw new Error("Tesseract WASM binary unavailable in current runtime environment");
+  }
+
+  const workerConfig: Record<string, any> = {
     langPath: TESSERACT_LANG_PATH,
     cacheMethod: "none",
-  } as any);
+  };
+  if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
+    workerConfig.cachePath = "/tmp";
+  }
+
+  // 5. Run Tesseract Worker with explicit blocks output format enabled.
+  // In Tesseract.js v5+, blocks/words/bboxes are only returned when requested via { blocks: true }.
+  const worker = await Tesseract.createWorker("eng", 1, workerConfig as any);
 
   let ret: any;
   try {

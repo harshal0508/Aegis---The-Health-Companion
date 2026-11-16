@@ -4,7 +4,10 @@ const nextConfig = {
   // Keep these packages as real node_modules requires at runtime.
   // Bundling them breaks __dirname-based path resolution inside tesseract.js
   // (worker script path) and native bindings inside sharp.
-  serverExternalPackages: ["tesseract.js", "sharp"],
+  serverExternalPackages: ["tesseract.js", "tesseract.js-core", "sharp"],
+  outputFileTracingIncludes: {
+    "/api/**/*": ["./node_modules/tesseract.js-core/**/*"],
+  },
   images: {
     remotePatterns: [
       {
