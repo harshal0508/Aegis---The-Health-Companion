@@ -134,34 +134,37 @@ export async function buildLiveModelChain(
   // Dynamic fallback ordering without hardcoded names:
   // - Exclude models that returned 404 (in deadModels)
   // - Exclude text-only gemma open-weights models
-  // - Score remaining models: Pro models (e.g. gemini-pro-latest, gemini-2.5-pro) have huge capacity
-  //   and absorb traffic when flash experiences 503 spikes.
+  // - Strictly FREE tier: Exclude "pro" models from fallback unless user explicitly configured a pro model
+  // - Prioritize vision-capable Flash models (e.g. gemini-flash-latest, gemini-3.5-flash, gemini-3.6-flash, gemini-3.7-flash, gemini-3.8-flash)
+  const allowPro = configured.includes("pro");
+
   const scoreModel = (name: string): number => {
     let score = 0;
     const isLite = name.includes("lite");
-    const isPro = name.includes("pro");
     const isFlash = name.includes("flash");
     const isLatest = name.includes("latest");
     const isPreview = name.includes("preview");
 
-    if (isPro && isLatest) score += 95;             // gemini-pro-latest (ideal 503 failover)
-    if (isFlash && !isLite && isLatest) score += 90; // gemini-flash-latest
-    if (isPro && !isPreview) score += 85;           // gemini-2.5-pro
-    if (isFlash && !isLite && !isPreview) score += 80; // gemini-3.5-flash
-    if (isPro && isPreview) score += 70;            // gemini-3.1-pro-preview
-    if (isFlash && !isLite && isPreview) score += 65; // gemini-3-flash-preview
-    if (isLite) score += 20;                        // lite as lower priority fallback
+    if (isFlash && !isLite && isLatest) score += 95;   // gemini-flash-latest
+    if (isFlash && !isLite && !isPreview) score += 90; // e.g. gemini-3.5-flash, gemini-3.6-flash, gemini-3.7-flash, gemini-3.8-flash
+    if (isFlash && !isLite && isPreview) score += 75;  // e.g. gemini-3-flash-preview
+    if (isLite && !isPreview) score += 30;             // lite models (fallback)
+    if (isLite && isPreview) score += 20;              // preview lite models
     return score;
   };
 
   const remaining = liveModels.filter(
-    (m) => m !== configured && !deadModels.has(m) && !m.startsWith("gemma")
+    (m) =>
+      m !== configured &&
+      !deadModels.has(m) &&
+      !m.startsWith("gemma") &&
+      (allowPro || !m.includes("pro")) // Strictly 100% free flash models unless user explicitly specified pro
   );
   remaining.sort((a, b) => scoreModel(b) - scoreModel(a));
 
   // Cap the chain at 6 models to guarantee deep resilience against 503 spikes.
   // 404s fail instantly in 80ms, 503s fail in ~3s. With maxDuration=120s on Vercel,
-  // 6 candidates provide optimal failover to Pro models when Flash is overloaded.
+  // 6 free Flash candidates provide optimal failover across different Flash version pools.
   const chain = [configured, ...remaining].slice(0, 6);
 
   return {
