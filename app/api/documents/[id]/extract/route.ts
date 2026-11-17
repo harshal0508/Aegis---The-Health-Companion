@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { NextResponse, unstable_after as after } from "next/server";
+import { NextResponse } from "next/server";
 import { inngest } from "@/lib/inngest/client";
 import { executeDocumentExtraction } from "@/lib/extraction/engine";
 
@@ -16,6 +16,7 @@ export async function POST(
 ) {
   try {
     const { id: documentId } = await params;
+    // eslint-disable-next-line no-console
     console.log(`[Extract Route] POST /api/documents/${documentId}/extract received`);
     const supabase = await createClient();
 
@@ -47,17 +48,19 @@ export async function POST(
       );
     }
 
-    // 3. Mark document as 'queued' immediately
-    await supabase
-      .from("documents")
-      .update({
-        status: "queued",
-        error_message: null,
-      })
-      .eq("id", documentId);
-
-    // 4. If Inngest event key is present, broadcast event
+    // 3. Dual Execution Pipeline:
+    // When Inngest Cloud is configured, enqueue to durable background worker and return immediately.
+    // When Inngest Cloud is not yet configured, execute directly with maxDuration=120 so Vercel Serverless
+    // does not terminate/freeze the container prematurely and streams logs in real-time.
     if (process.env.INNGEST_EVENT_KEY) {
+      await supabase
+        .from("documents")
+        .update({
+          status: "queued",
+          error_message: null,
+        })
+        .eq("id", documentId);
+
       try {
         await inngest.send({
           name: "document/extract",
@@ -66,30 +69,33 @@ export async function POST(
             userId: user.id,
           },
         });
+        // eslint-disable-next-line no-console
+        console.log(`[Extract Route] Enqueued document ${documentId} to Inngest background queue`);
       } catch (inngestErr: any) {
         console.warn("[Inngest] Event queue warning:", inngestErr?.message || inngestErr);
       }
+
+      return NextResponse.json({
+        success: true,
+        documentId,
+        status: "queued",
+        message: "We're reading your document. You can leave this page.",
+      });
     }
 
-    // 5. Always execute extraction in background via Next.js 15 after()
-    // This guarantees the serverless container stays alive to process the document
-    // and streams all execution logs to Vercel without blocking the HTTP response
-    after(async () => {
-      console.log(`[Background Extraction] Invoking executeDocumentExtraction for documentId=${documentId}`);
-      try {
-        const result = await executeDocumentExtraction(documentId, user.id);
-        console.log(`[Background Extraction] Completed for documentId=${documentId}: status=${result.status}`);
-      } catch (err: any) {
-        console.error("[Background Extraction Error]", err?.message || err);
-      }
-    });
+    // Direct Synchronous Execution Path on Serverless (Guarantees execution & live logs):
+    // eslint-disable-next-line no-console
+    console.log(`[Extract Route] Inngest queue not configured; running extraction directly with maxDuration=120 for documentId=${documentId}`);
+    const result = await executeDocumentExtraction(documentId, user.id);
+    // eslint-disable-next-line no-console
+    console.log(`[Extract Route] Extraction completed for ${documentId}: status=${result.status}`);
 
-    // 6. Return immediately to the client
     return NextResponse.json({
-      success: true,
+      success: result.success,
       documentId,
-      status: "queued",
-      message: "We're reading your document. You can leave this page.",
+      status: result.status,
+      summary: result.summary,
+      message: result.status === "ready" ? "Extraction completed successfully." : result.error,
     });
   } catch (err: any) {
     return NextResponse.json(
