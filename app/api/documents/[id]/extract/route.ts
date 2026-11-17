@@ -1,7 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
-import { NextResponse } from "next/server";
+import { NextResponse, unstable_after as after } from "next/server";
 import { inngest } from "@/lib/inngest/client";
 import { executeDocumentExtraction } from "@/lib/extraction/engine";
+
+// Extend Vercel serverless function execution limit for extraction
+export const maxDuration = 120;
 
 /**
  * Enqueues document extraction as a durable background task and returns immediately.
@@ -52,7 +55,7 @@ export async function POST(
       })
       .eq("id", documentId);
 
-    // 4. Enqueue background extraction job via Inngest
+    // 4. Enqueue background extraction job via Inngest or execute in resilient background worker
     try {
       await inngest.send({
         name: "document/extract",
@@ -61,10 +64,14 @@ export async function POST(
           userId: user.id,
         },
       });
-    } catch (inngestErr) {
-      // Standalone/fallback runner: execute asynchronously without blocking HTTP response
-      executeDocumentExtraction(documentId, user.id).catch((err) => {
-        console.error("[Background Extraction Error]", err?.message || err);
+    } catch {
+      // Use Next.js 15 after() to ensure Vercel does not terminate or freeze the serverless execution
+      after(async () => {
+        try {
+          await executeDocumentExtraction(documentId, user.id);
+        } catch (err: any) {
+          console.error("[Background Extraction Error]", err?.message || err);
+        }
       });
     }
 

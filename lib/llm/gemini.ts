@@ -85,7 +85,11 @@ export async function getLiveGeminiModels(apiKey: string): Promise<string[]> {
         !name.includes("tts") &&
         !name.includes("transcribe") &&
         !name.includes("lyria") &&
-        !name.includes("robotics")
+        !name.includes("robotics") &&
+        !name.endsWith("-image") &&
+        !name.includes("-image-") &&
+        !name.includes("banana") &&
+        !name.includes("computer-use")
     );
 
   cachedLiveModels = {
@@ -403,15 +407,10 @@ ${ocrText}
 
           // Auto-recover if model rejects thinkingConfig (400 Bad Request)
           if (response.status === 400) {
-            const errText = await response.text();
-            if (
-              (errText.includes("thinkingConfig") || errText.includes("thinkingBudget")) &&
-              body.generationConfig?.thinkingConfig
-            ) {
+            if (body.generationConfig?.thinkingConfig) {
               delete body.generationConfig.thinkingConfig;
               continue;
             }
-            // Non-recoverable 400: break to next model or surface error
             modelFailed = true;
             break;
           }
@@ -443,6 +442,11 @@ ${ocrText}
           );
 
           if (err?.name === "AbortError" || err?.name === "TimeoutError") {
+            if (attempts < maxAttempts) {
+              await new Promise((resolve) => setTimeout(resolve, delayMs));
+              delayMs *= 2;
+              continue;
+            }
             modelFailed = true;
             break;
           }
