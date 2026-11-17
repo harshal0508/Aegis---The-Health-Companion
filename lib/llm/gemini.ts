@@ -136,9 +136,14 @@ export async function buildLiveModelChain(
     return bFast - aFast;
   });
 
+  // Cap the chain at 3 models (primary + 2 fallbacks) to stay well within maxDuration=120s.
+  // Each model gets 2 attempts × 30s timeout = max ~60s per model → 3 models = max ~180s worst case,
+  // but 404s are instant so the typical path is primary (200) or primary (fail) + fallback 1 (200).
+  const chain = [configured, ...remaining].slice(0, 3);
+
   return {
     primaryModel: configured,
-    chain: [configured, ...remaining],
+    chain,
   };
 }
 
@@ -391,7 +396,7 @@ ${ocrText}
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(body),
-            signal: AbortSignal.timeout(60000),
+            signal: AbortSignal.timeout(30000),
           });
 
           // Requirement 7: Log model name, status code, and attempt count ONLY. No document content.
