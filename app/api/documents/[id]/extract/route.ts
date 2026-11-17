@@ -55,27 +55,33 @@ export async function POST(
       })
       .eq("id", documentId);
 
-    // 4. Enqueue background extraction job via Inngest or execute in resilient background worker
-    try {
-      await inngest.send({
-        name: "document/extract",
-        data: {
-          documentId,
-          userId: user.id,
-        },
-      });
-    } catch {
-      // Use Next.js 15 after() to ensure Vercel does not terminate or freeze the serverless execution
-      after(async () => {
-        try {
-          await executeDocumentExtraction(documentId, user.id);
-        } catch (err: any) {
-          console.error("[Background Extraction Error]", err?.message || err);
-        }
-      });
+    // 4. If Inngest event key is present, broadcast event
+    if (process.env.INNGEST_EVENT_KEY) {
+      try {
+        await inngest.send({
+          name: "document/extract",
+          data: {
+            documentId,
+            userId: user.id,
+          },
+        });
+      } catch (inngestErr: any) {
+        console.warn("[Inngest] Event queue warning:", inngestErr?.message || inngestErr);
+      }
     }
 
-    // 5. Return immediately to the client
+    // 5. Always execute extraction in background via Next.js 15 after()
+    // This guarantees the serverless container stays alive to process the document
+    // and streams all execution logs to Vercel without blocking the HTTP response
+    after(async () => {
+      try {
+        await executeDocumentExtraction(documentId, user.id);
+      } catch (err: any) {
+        console.error("[Background Extraction Error]", err?.message || err);
+      }
+    });
+
+    // 6. Return immediately to the client
     return NextResponse.json({
       success: true,
       documentId,

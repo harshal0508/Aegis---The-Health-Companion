@@ -38,6 +38,8 @@ export async function executeDocumentExtraction(
   documentId: string,
   userId: string
 ): Promise<ExtractionExecutionResult> {
+  // eslint-disable-next-line no-console
+  console.log(`[Extraction Pipeline] Starting extraction: documentId=${documentId}`);
   const supabase = await createClient();
 
   // 1. Fetch Document owned by user
@@ -451,6 +453,11 @@ export async function executeDocumentExtraction(
       .update(docUpdateData)
       .eq("id", documentId);
 
+    // eslint-disable-next-line no-console
+    console.log(
+      `[Extraction Pipeline] Extraction succeeded: documentId=${documentId} items=${nonDuplicateRows.length} source=${dominantReaderSource}`
+    );
+
     return {
       success: true,
       documentId,
@@ -472,6 +479,9 @@ export async function executeDocumentExtraction(
         error_message: errorMsg,
       })
       .eq("id", documentId);
+
+    // eslint-disable-next-line no-console
+    console.log(`[Extraction Pipeline] Extraction failed: documentId=${documentId} error=${errorMsg}`);
 
     return {
       success: false,
