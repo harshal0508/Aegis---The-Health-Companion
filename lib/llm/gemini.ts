@@ -145,9 +145,9 @@ export async function buildLiveModelChain(
     const isLatest = name.includes("latest");
     const isPreview = name.includes("preview");
 
-    if (isFlash && !isLite && isLatest) score += 95;   // gemini-flash-latest
-    if (isFlash && !isLite && !isPreview) score += 90; // e.g. gemini-3.5-flash, gemini-3.6-flash, gemini-3.7-flash, gemini-3.8-flash
-    if (isFlash && !isLite && isPreview) score += 75;  // e.g. gemini-3-flash-preview
+    if (isFlash && !isLite && isLatest) score += 95;   // gemini-flash-latest (primary preference)
+    if (isFlash && !isLite && !isPreview) score += 90; // full flash: gemini-3.5-flash, gemini-3.6-flash, etc.
+    if (isFlash && !isLite && isPreview) score += 75;  // preview flash: gemini-3-flash-preview
     if (isLite && !isPreview) score += 30;             // lite models (fallback)
     if (isLite && isPreview) score += 20;              // preview lite models
     return score;
@@ -424,7 +424,7 @@ ${ocrText}
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(body),
-            signal: AbortSignal.timeout(30000),
+            signal: AbortSignal.timeout(50000),
           });
 
           // Requirement 7: Log model name, status code, and attempt count ONLY. No document content.
@@ -455,11 +455,17 @@ ${ocrText}
               modelFailed = true;
               break;
             }
-            // If vision model returned 200 but no OCR text, it couldn't read the image — cascade
+            // If vision model returned 200 but no OCR text or 0 extracted items, cascade if more candidates exist
             const hasImage = body.contents?.[0]?.parts?.some((p: any) => p.inline_data);
             if (hasImage && (!parsed.ocr_text || parsed.ocr_text.trim().length < 10)) {
               // eslint-disable-next-line no-console
               console.log(`[Gemini Extraction] model=${candidateModel} returned empty ocr_text (no vision capability) — cascading`);
+              modelFailed = true;
+              break;
+            }
+            if (hasImage && (!parsed.items || parsed.items.length === 0) && i < this.modelChain.length - 1) {
+              // eslint-disable-next-line no-console
+              console.log(`[Gemini Extraction] model=${candidateModel} extracted 0 items from image — cascading to next fallback`);
               modelFailed = true;
               break;
             }
