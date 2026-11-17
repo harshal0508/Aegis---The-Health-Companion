@@ -81,7 +81,11 @@ export async function getLiveGeminiModels(apiKey: string): Promise<string[]> {
       (name) =>
         !name.includes("embedding") &&
         !name.includes("aqa") &&
-        !name.includes("imagen")
+        !name.includes("imagen") &&
+        !name.includes("tts") &&
+        !name.includes("transcribe") &&
+        !name.includes("lyria") &&
+        !name.includes("robotics")
     );
 
   cachedLiveModels = {
