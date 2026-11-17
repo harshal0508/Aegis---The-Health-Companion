@@ -1,6 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  experimental: {
+    after: true,
+  },
   // Keep these packages as real node_modules requires at runtime.
   // Bundling them breaks __dirname-based path resolution inside tesseract.js
   // (worker script path) and native bindings inside sharp.

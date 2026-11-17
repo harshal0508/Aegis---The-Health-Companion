@@ -16,6 +16,7 @@ export async function POST(
 ) {
   try {
     const { id: documentId } = await params;
+    console.log(`[Extract Route] POST /api/documents/${documentId}/extract received`);
     const supabase = await createClient();
 
     // 1. Verify User Authentication
@@ -74,8 +75,10 @@ export async function POST(
     // This guarantees the serverless container stays alive to process the document
     // and streams all execution logs to Vercel without blocking the HTTP response
     after(async () => {
+      console.log(`[Background Extraction] Invoking executeDocumentExtraction for documentId=${documentId}`);
       try {
-        await executeDocumentExtraction(documentId, user.id);
+        const result = await executeDocumentExtraction(documentId, user.id);
+        console.log(`[Background Extraction] Completed for documentId=${documentId}: status=${result.status}`);
       } catch (err: any) {
         console.error("[Background Extraction Error]", err?.message || err);
       }
