@@ -377,8 +377,10 @@ ${ocrText}
     body: any,
     pageNo: number
   ): Promise<PageExtractionResult> {
-    let response: Response | null = null;
+    // Tracks the last successful HTTP response for error reporting
+    let lastResponse: Response | null = null;
     let successfulModel = this.configuredModel;
+    let parsedResult: ExtractionPayload | null = null;
 
     for (let i = 0; i < this.modelChain.length; i++) {
       const candidateModel = this.modelChain[i];
@@ -392,7 +394,7 @@ ${ocrText}
       while (attempts < maxAttempts) {
         attempts++;
         try {
-          response = await fetch(url, {
+          const response = await fetch(url, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(body),
@@ -406,7 +408,36 @@ ${ocrText}
           );
 
           if (response.ok) {
+            lastResponse = response;
+
+            // Parse and validate the response immediately.
+            // A model that doesn't support vision returns 200 but empty ocr_text — cascade if so.
+            const json: GeminiApiResponse = await response.json();
+            const candidateText = json.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (!candidateText) {
+              // eslint-disable-next-line no-console
+              console.log(`[Gemini Extraction] model=${candidateModel} returned empty candidate — cascading`);
+              modelFailed = true;
+              break;
+            }
+            let parsed: ExtractionPayload;
+            try {
+              parsed = JSON.parse(candidateText);
+            } catch {
+              // eslint-disable-next-line no-console
+              console.log(`[Gemini Extraction] model=${candidateModel} returned unparseable JSON — cascading`);
+              modelFailed = true;
+              break;
+            }
+            // If vision model returned 200 but no OCR text, it couldn't read the image — cascade
+            if (!parsed.ocr_text || parsed.ocr_text.trim().length < 10) {
+              // eslint-disable-next-line no-console
+              console.log(`[Gemini Extraction] model=${candidateModel} returned empty ocr_text (no vision capability) — cascading`);
+              modelFailed = true;
+              break;
+            }
             successfulModel = candidateModel;
+            parsedResult = parsed;
             break;
           }
 
@@ -431,7 +462,7 @@ ${ocrText}
             break;
           }
 
-          // 429 Quota Exceeded: break immediately to allow higher-level queue retry
+          // 429 Quota Exceeded: cascade to next model
           if (response.status === 429) {
             modelFailed = true;
             break;
@@ -464,30 +495,19 @@ ${ocrText}
         }
       }
 
-      if (!modelFailed && response && response.ok) {
+      // If we got a parsed result with real OCR text, we're done
+      if (!modelFailed && parsedResult) {
         break;
       }
     }
 
-    if (!response || !response.ok) {
+    if (!parsedResult) {
       throw new Error(
-        `Gemini extraction request failed across dynamic live model chain (${this.modelChain.slice(0, 3).join(", ")}...).`
+        `Gemini extraction failed: no model in chain (${this.modelChain.slice(0, 3).join(", ")}) returned usable content.`
       );
     }
 
-    const json: GeminiApiResponse = await response.json();
-    const candidateText = json.candidates?.[0]?.content?.parts?.[0]?.text;
-
-    if (!candidateText) {
-      throw new Error("Gemini API returned an empty extraction candidate.");
-    }
-
-    let parsedResult: ExtractionPayload;
-    try {
-      parsedResult = JSON.parse(candidateText);
-    } catch (e: any) {
-      throw new Error(`Failed to parse extraction JSON response: ${e.message}`);
-    }
+    // parsedResult is guaranteed non-null and contains real ocr_text
 
     const isPrimary = successfulModel === this.configuredModel;
     const readerSource = isPrimary ? "primary_vision" : "fallback_vision";
@@ -529,7 +549,7 @@ ${ocrText}
       patient_name_latin: parsedResult.patient_name_latin || null,
       patient_dob: parsedResult.patient_dob || null,
       items,
-      model_version: json.modelVersion || successfulModel,
+      model_version: successfulModel,
       reader_source: readerSource,
     };
   }
