@@ -42,8 +42,12 @@ interface ExtractionPayload {
 let cachedLiveModels: { timestamp: number; models: string[] } | null = null;
 const MODEL_CACHE_TTL_MS = 60 * 60 * 1000;
 
+// Track models that returned 404 (e.g. experimental endpoints in list but not callable)
+const deadModels = new Set<string>();
+
 export function clearLiveModelsCache(): void {
   cachedLiveModels = null;
+  deadModels.clear();
 }
 
 /**
@@ -128,18 +132,37 @@ export async function buildLiveModelChain(
   }
 
   // Dynamic fallback ordering without hardcoded names:
-  // Order remaining active models by prioritizing 'flash' and 'lite' variants first
-  const remaining = liveModels.filter((m) => m !== configured);
-  remaining.sort((a, b) => {
-    const aFast = a.includes("flash") || a.includes("lite") ? 1 : 0;
-    const bFast = b.includes("flash") || b.includes("lite") ? 1 : 0;
-    return bFast - aFast;
-  });
+  // - Exclude models that returned 404 (in deadModels)
+  // - Exclude text-only gemma open-weights models
+  // - Score remaining models: Pro models (e.g. gemini-pro-latest, gemini-2.5-pro) have huge capacity
+  //   and absorb traffic when flash experiences 503 spikes.
+  const scoreModel = (name: string): number => {
+    let score = 0;
+    const isLite = name.includes("lite");
+    const isPro = name.includes("pro");
+    const isFlash = name.includes("flash");
+    const isLatest = name.includes("latest");
+    const isPreview = name.includes("preview");
 
-  // Cap the chain at 3 models (primary + 2 fallbacks) to stay well within maxDuration=120s.
-  // Each model gets 2 attempts × 30s timeout = max ~60s per model → 3 models = max ~180s worst case,
-  // but 404s are instant so the typical path is primary (200) or primary (fail) + fallback 1 (200).
-  const chain = [configured, ...remaining].slice(0, 3);
+    if (isPro && isLatest) score += 95;             // gemini-pro-latest (ideal 503 failover)
+    if (isFlash && !isLite && isLatest) score += 90; // gemini-flash-latest
+    if (isPro && !isPreview) score += 85;           // gemini-2.5-pro
+    if (isFlash && !isLite && !isPreview) score += 80; // gemini-3.5-flash
+    if (isPro && isPreview) score += 70;            // gemini-3.1-pro-preview
+    if (isFlash && !isLite && isPreview) score += 65; // gemini-3-flash-preview
+    if (isLite) score += 20;                        // lite as lower priority fallback
+    return score;
+  };
+
+  const remaining = liveModels.filter(
+    (m) => m !== configured && !deadModels.has(m) && !m.startsWith("gemma")
+  );
+  remaining.sort((a, b) => scoreModel(b) - scoreModel(a));
+
+  // Cap the chain at 6 models to guarantee deep resilience against 503 spikes.
+  // 404s fail instantly in 80ms, 503s fail in ~3s. With maxDuration=120s on Vercel,
+  // 6 candidates provide optimal failover to Pro models when Flash is overloaded.
+  const chain = [configured, ...remaining].slice(0, 6);
 
   return {
     primaryModel: configured,
@@ -430,7 +453,8 @@ ${ocrText}
               break;
             }
             // If vision model returned 200 but no OCR text, it couldn't read the image — cascade
-            if (!parsed.ocr_text || parsed.ocr_text.trim().length < 10) {
+            const hasImage = body.contents?.[0]?.parts?.some((p: any) => p.inline_data);
+            if (hasImage && (!parsed.ocr_text || parsed.ocr_text.trim().length < 10)) {
               // eslint-disable-next-line no-console
               console.log(`[Gemini Extraction] model=${candidateModel} returned empty ocr_text (no vision capability) — cascading`);
               modelFailed = true;
@@ -451,9 +475,16 @@ ${ocrText}
             break;
           }
 
-          // 404 or 503 / 5xx: cascade to next model in live chain
-          if (response.status === 404 || response.status === 503 || response.status >= 500) {
-            if (attempts < maxAttempts && response.status !== 404) {
+          // 404 Not Found: mark model dead so we never call it again during this session, and cascade immediately
+          if (response.status === 404) {
+            deadModels.add(candidateModel);
+            modelFailed = true;
+            break;
+          }
+
+          // 503 / 5xx: cascade to next model in live chain
+          if (response.status === 503 || response.status >= 500) {
+            if (attempts < maxAttempts) {
               await new Promise((resolve) => setTimeout(resolve, delayMs));
               delayMs *= 2;
               continue;
@@ -503,7 +534,7 @@ ${ocrText}
 
     if (!parsedResult) {
       throw new Error(
-        `Gemini extraction failed: no model in chain (${this.modelChain.slice(0, 3).join(", ")}) returned usable content.`
+        `Gemini extraction failed: no model in chain (${this.modelChain.join(", ")}) returned usable content.`
       );
     }
 
