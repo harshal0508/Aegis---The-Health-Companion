@@ -44,9 +44,11 @@ interface DocumentData {
   storage_path: string;
   doc_type: string;
   doc_date: string | null;
-  status: "uploaded" | "processing" | "ready" | "failed";
+  status: "uploaded" | "queued" | "processing" | "ready" | "failed";
   page_count: number | null;
   created_at: string;
+  error_message?: string | null;
+  reader_source?: string | null;
 }
 
 interface ItemData {
@@ -58,6 +60,7 @@ interface ItemData {
   status: string;
   source: string;
   page_id: string | null;
+  reader_source?: string | null;
   ocr_check?: {
     state: "agree" | "disagree" | "unavailable";
     page_confidence?: number;
@@ -171,32 +174,38 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
     init();
   }, [loadDocument]);
 
+  // Non-blocking status polling when document is 'queued' or 'processing'
+  // Rule 3: "We're reading your document. You can leave this page." No spinner that blocks the page.
+  useEffect(() => {
+    if (!document || (document.status !== "queued" && document.status !== "processing")) {
+      return;
+    }
+
+    const interval = setInterval(async () => {
+      const reloaded = await loadDocument();
+      if (reloaded?.document?.status === "ready" || reloaded?.document?.status === "failed") {
+        clearInterval(interval);
+      }
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [document, loadDocument]);
+
   const handleExtract = async () => {
     setExtracting(true);
     setExtractError(null);
     try {
       const res = await fetch(`/api/documents/${documentId}/extract`, {
         method: "POST",
-        signal: AbortSignal.timeout(90000), // 90s client timeout so UI never hangs indefinitely
       });
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || "Extraction failed");
+        throw new Error(data.error || "Failed to queue extraction");
       }
-      const reloadedData = await loadDocument();
-      if (reloadedData?.items && activeItemId) {
-        const found = reloadedData.items.find((i: ItemData) => i.id === activeItemId);
-        if (found?.ocr_check?.bounding_boxes && found.ocr_check.bounding_boxes.length > 0) {
-          setActiveBoxes(found.ocr_check.bounding_boxes);
-          setBoxNotFound(false);
-        }
-      }
+      // Reload immediately to capture the 'queued' status and start polling
+      await loadDocument();
     } catch (err: any) {
-      if (err.name === "TimeoutError" || err.name === "AbortError") {
-        setExtractError("Extraction timed out. The server or AI model took longer than expected. Please try again.");
-      } else {
-        setExtractError(err.message || "Extraction failed");
-      }
+      setExtractError(err.message || "Extraction queueing failed");
     } finally {
       setExtracting(false);
     }
@@ -331,14 +340,35 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
                 }
                 className={
                   document.status === "ready"
-                    ? "bg-teal-600 hover:bg-teal-700"
-                    : document.status === "uploaded"
-                    ? "bg-amber-100 text-amber-800 hover:bg-amber-100"
-                    : ""
+                    ? "bg-teal-600 hover:bg-teal-700 text-white"
+                    : document.status === "failed"
+                    ? "bg-red-100 text-red-800 hover:bg-red-100"
+                    : document.status === "queued" || document.status === "processing"
+                    ? "bg-teal-100 text-teal-800 animate-pulse hover:bg-teal-100"
+                    : "bg-amber-100 text-amber-800 hover:bg-amber-100"
                 }
               >
-                {document.status === "uploaded" ? "Uploaded (Pending Extraction)" : document.status}
+                {document.status === "uploaded"
+                  ? "Uploaded (Pending)"
+                  : document.status === "queued"
+                  ? "Queued for Extraction"
+                  : document.status === "processing"
+                  ? "Reading Document..."
+                  : document.status === "ready"
+                  ? "Ready"
+                  : "Extraction Failed"}
               </Badge>
+              {document.reader_source && document.reader_source !== "primary_vision" && (
+                <Badge variant="outline" className="text-amber-800 bg-amber-50 border-amber-300 text-[10px]">
+                  {document.reader_source === "fallback_vision"
+                    ? "Fallback Vision"
+                    : document.reader_source === "text_ocr_azure"
+                    ? "Azure OCR Text"
+                    : document.reader_source === "text_ocr_tesseract"
+                    ? "Tesseract OCR Text"
+                    : document.reader_source}
+                </Badge>
+              )}
             </div>
             <div className="flex items-center gap-4 text-xs text-muted-foreground mt-1">
               <span className="flex items-center gap-1">
@@ -587,47 +617,117 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
             </div>
 
             {items.length === 0 ? (
-              <div className="py-6 text-center space-y-4">
-                <div className="h-10 w-10 rounded-full bg-teal-50 text-teal-600 flex items-center justify-center mx-auto">
-                  <Sparkles className="h-5 w-5" />
+              document.status === "queued" || document.status === "processing" ? (
+                <div className="py-6 px-3 text-center space-y-4 rounded-xl bg-teal-50/70 border border-teal-200/80">
+                  <div className="h-10 w-10 rounded-full bg-teal-100 text-teal-700 flex items-center justify-center mx-auto">
+                    <Sparkles className="h-5 w-5 animate-pulse" />
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm font-semibold text-teal-950">
+                      We&apos;re reading your document. You can leave this page.
+                    </p>
+                    <p className="text-xs text-teal-800/90 leading-relaxed max-w-sm mx-auto">
+                      Background extraction is in progress. Verified medications, conditions, and clinical records will appear here as soon as processing completes.
+                    </p>
+                  </div>
+                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-teal-100/80 text-teal-800 text-xs font-medium">
+                    <div className="h-2 w-2 rounded-full bg-teal-600 animate-ping" />
+                    <span>Status: {document.status === "queued" ? "Queued in background" : "Processing pages..."}</span>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm font-semibold text-gray-900">
-                    Ready for Clinical Extraction
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                    Extract verified medications, allergies, conditions, and procedures from this document with strict verbatim quote verification.
-                  </p>
+              ) : document.status === "failed" ? (
+                <div className="py-6 px-4 text-center space-y-4 rounded-xl bg-red-50 border border-red-200">
+                  <div className="h-10 w-10 rounded-full bg-red-100 text-red-600 flex items-center justify-center mx-auto">
+                    <AlertCircle className="h-5 w-5" />
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm font-semibold text-red-950">
+                      Extraction Could Not Complete
+                    </p>
+                    <p className="text-xs text-red-800 leading-relaxed max-w-sm mx-auto">
+                      {document.error_message || "An issue occurred during extraction. Failed attempts do not count against your daily quota."}
+                    </p>
+                  </div>
+                  <Button
+                    onClick={handleExtract}
+                    disabled={extracting}
+                    className="w-full bg-red-600 hover:bg-red-700 text-white font-medium shadow-sm text-xs h-9"
+                  >
+                    {extracting ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                        Queuing retry...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="h-3.5 w-3.5 mr-1.5" />
+                        Retry Extraction
+                      </>
+                    )}
+                  </Button>
                 </div>
+              ) : (
+                <div className="py-6 text-center space-y-4">
+                  <div className="h-10 w-10 rounded-full bg-teal-50 text-teal-600 flex items-center justify-center mx-auto">
+                    <Sparkles className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900">
+                      Ready for Clinical Extraction
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                      Extract verified medications, allergies, conditions, and procedures from this document with strict verbatim quote verification.
+                    </p>
+                  </div>
 
-                <Button
-                  onClick={handleExtract}
-                  disabled={extracting}
-                  className="w-full bg-teal-600 hover:bg-teal-700 text-white font-medium shadow-sm"
-                >
-                  {extracting ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Extracting clinical records...
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="h-4 w-4 mr-2" />
-                      Extract Records from Document
-                    </>
-                  )}
-                </Button>
+                  <Button
+                    onClick={handleExtract}
+                    disabled={extracting}
+                    className="w-full bg-teal-600 hover:bg-teal-700 text-white font-medium shadow-sm"
+                  >
+                    {extracting ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Queuing extraction...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="h-4 w-4 mr-2" />
+                        Extract Records from Document
+                      </>
+                    )}
+                  </Button>
 
-                <div className="rounded-lg bg-gray-50 border p-3 text-left space-y-1.5 text-xs text-gray-600">
-                  <p className="font-semibold text-gray-800">Phase 3 Guarantees:</p>
-                  <p>• Every item requires an exact verbatim quote</p>
-                  <p>• Unverified quotes marked needs review</p>
-                  <p>• Items start unconfirmed — patient has final say</p>
-                  <p>• Zero storage of plain OCR in public logs</p>
+                  <div className="rounded-lg bg-gray-50 border p-3 text-left space-y-1.5 text-xs text-gray-600">
+                    <p className="font-semibold text-gray-800">Phase 3 Guarantees:</p>
+                    <p>• Every item requires an exact verbatim quote</p>
+                    <p>• Unverified quotes marked needs review</p>
+                    <p>• Items start unconfirmed — patient has final say</p>
+                    <p>• Zero storage of plain OCR in public logs</p>
+                  </div>
                 </div>
-              </div>
+              )
             ) : (
               <div className="space-y-3">
+                {(document.status === "queued" || document.status === "processing") && (
+                  <div className="p-3 rounded-lg bg-teal-50 border border-teal-200 text-teal-900 text-xs flex items-center gap-2">
+                    <div className="h-2 w-2 rounded-full bg-teal-600 animate-ping" />
+                    <span>We&apos;re reading your document. You can leave this page.</span>
+                  </div>
+                )}
+                {document.status === "failed" && (
+                  <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-900 text-xs space-y-2">
+                    <p className="font-semibold text-red-950">Extraction issue: {document.error_message}</p>
+                    <Button
+                      onClick={handleExtract}
+                      disabled={extracting}
+                      size="sm"
+                      className="bg-red-600 hover:bg-red-700 text-white text-xs h-7 w-full"
+                    >
+                      Retry Extraction
+                    </Button>
+                  </div>
+                )}
                 <div className="flex items-center justify-between pb-1">
                   <Button
                     onClick={handleExtract}
@@ -709,6 +809,19 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
                       {item.ocr_check?.state === "unavailable" && (
                         <Badge variant="secondary" className="bg-slate-100 text-slate-700 border-slate-200 text-[9px] px-1.5 py-0">
                           Second reader unavailable
+                        </Badge>
+                      )}
+
+                      {/* Rule 6: Flag anything produced by a fallback reader */}
+                      {item.reader_source && item.reader_source !== "primary_vision" && (
+                        <Badge variant="outline" className="text-amber-800 bg-amber-50 border-amber-300 text-[9px] px-1.5 py-0">
+                          {item.reader_source === "fallback_vision"
+                            ? "Fallback Vision"
+                            : item.reader_source === "text_ocr_azure"
+                            ? "Azure OCR Text"
+                            : item.reader_source === "text_ocr_tesseract"
+                            ? "Tesseract OCR Text"
+                            : item.reader_source}
                         </Badge>
                       )}
                     </div>

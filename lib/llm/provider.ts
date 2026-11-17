@@ -1,5 +1,6 @@
 // This file defines the extraction interface and provider registry.
-// Phase 3 adds Gemini vision extraction with quote verification and doc_date detection.
+// Phase 3 adds Gemini vision extraction with quote verification, doc_date detection,
+// and text-only extraction with reader_source tagging.
 
 export type ExtractionCategory =
   | "allergy"
@@ -17,6 +18,9 @@ export interface ExtractedItem {
   confidence: number; // 0–1
   normalization_source?: "none" | "brand_table" | "rxnorm" | "llm_inferred";
   normalized_value?: string; // only present if normalization_source !== 'none'
+  reader_source?: string; // e.g. 'primary_vision', 'fallback_vision', 'text_ocr_azure', 'text_ocr_tesseract'
+  verified?: boolean;
+  status?: "extracted" | "needs_review";
 }
 
 export interface PageExtractionResult {
@@ -29,6 +33,7 @@ export interface PageExtractionResult {
   patient_dob?: string | null;
   items: ExtractedItem[];
   model_version?: string;
+  reader_source?: string; // 'primary_vision' | 'fallback_vision' | 'text_ocr_azure' | 'text_ocr_tesseract'
 }
 
 export interface LLMProvider {
@@ -42,13 +47,25 @@ export interface LLMProvider {
     mimeType?: string,
     pageNo?: number
   ): Promise<PageExtractionResult>;
+
+  /**
+   * Text-only clinical extraction path that takes pre-extracted OCR text and extracts
+   * items adhering strictly to quotes present in ocrText.
+   */
+  extractFromText(
+    ocrText: string,
+    pageNo?: number,
+    readerSourceOverride?: string
+  ): Promise<PageExtractionResult>;
 }
 
 // Provider registry
 const PROVIDERS: Record<string, () => Promise<LLMProvider>> = {
   gemini: async () => {
     const { GeminiProvider } = await import("./gemini");
-    return new GeminiProvider();
+    const provider = new GeminiProvider();
+    await provider.initialize();
+    return provider;
   },
 };
 

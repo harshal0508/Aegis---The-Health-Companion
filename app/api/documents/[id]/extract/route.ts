@@ -1,23 +1,12 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
-import { getProvider } from "@/lib/llm/provider";
-import { verifyQuotesAgainstOcr, deduplicateExtractedItems } from "@/lib/extraction/verify";
-import { ocrPage, type TesseractResult } from "@/lib/ocr/tesseract";
-import { crossCheckItem } from "@/lib/extraction/crosscheck";
-import { locateQuoteBoundingBoxes } from "@/lib/extraction/locator";
-import { matchPatientIdentity } from "@/lib/extraction/identity-matcher";
-import sharp from "sharp";
+import { inngest } from "@/lib/inngest/client";
+import { executeDocumentExtraction } from "@/lib/extraction/engine";
 
-// Daily extraction page cap per user (configurable via DAILY_PAGE_CAP).
-// In development, default to generous cap (500 pages) so testing is never blocked.
-const DAILY_PAGE_CAP =
-  process.env.NODE_ENV !== "production"
-    ? 500
-    : parseInt(process.env.DAILY_PAGE_CAP || "50", 10);
-
-// Extend Vercel serverless function execution limit for extraction
-export const maxDuration = 120;
-
+/**
+ * Enqueues document extraction as a durable background task and returns immediately.
+ * Statuses: uploaded -> queued -> processing -> ready / failed
+ */
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -39,10 +28,10 @@ export async function POST(
       );
     }
 
-    // 2. Fetch Document owned by user
+    // 2. Verify Document Ownership
     const { data: document, error: docErr } = await supabase
       .from("documents")
-      .select("id, user_id, patient_id, storage_path, doc_date, doc_type, status")
+      .select("id, status")
       .eq("id", documentId)
       .eq("user_id", user.id)
       .single();
@@ -54,516 +43,41 @@ export async function POST(
       );
     }
 
-    // 2.1 Fetch patient profile for identity matching (check patients table first, fallback to profiles)
-    let profile: any = null;
-    if (document.patient_id) {
-      const { data: patientRow } = await supabase
-        .from("patients")
-        .select("full_name, dob")
-        .eq("id", document.patient_id)
-        .maybeSingle();
-      profile = patientRow;
-    }
-
-    if (!profile) {
-      const { data: userProfile } = await supabase
-        .from("profiles")
-        .select("full_name, dob")
-        .eq("id", user.id)
-        .single();
-      profile = userProfile;
-    }
-
-    // 3. Fetch Pages of the document
-    const { data: pages, error: pagesErr } = await supabase
-      .from("pages")
-      .select("id, page_no, ocr_text")
-      .eq("document_id", documentId)
-      .order("page_no", { ascending: true });
-
-    if (pagesErr || !pages || pages.length === 0) {
-      return NextResponse.json(
-        { error: "No document pages found to extract." },
-        { status: 400 }
-      );
-    }
-
-    // 4. Rate Limiting: Daily page extraction cap (Rule 5)
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const { count: extractedTodayCount, error: countErr } = await supabase
-      .from("pages")
-      .select("id", { count: "exact", head: true })
-      .not("ocr_text", "is", null)
-      .gte("created_at", today.toISOString());
-
-    if (!countErr && (extractedTodayCount ?? 0) >= DAILY_PAGE_CAP) {
-      return NextResponse.json(
-        {
-          error: `Daily page extraction cap reached (${DAILY_PAGE_CAP} pages/day). To keep this service free, please continue tomorrow.`,
-        },
-        { status: 429 }
-      );
-    }
-
-    // 5. Update document status to 'processing'
+    // 3. Mark document as 'queued' immediately
     await supabase
       .from("documents")
-      .update({ status: "processing" })
+      .update({
+        status: "queued",
+        error_message: null,
+      })
       .eq("id", documentId);
 
-    // 6. Initialize Extraction Provider
-    let provider;
+    // 4. Enqueue background extraction job via Inngest
     try {
-      provider = await getProvider();
-    } catch (err: any) {
-      await supabase
-        .from("documents")
-        .update({ status: "uploaded" })
-        .eq("id", documentId);
-      return NextResponse.json({ error: err.message }, { status: 500 });
+      await inngest.send({
+        name: "document/extract",
+        data: {
+          documentId,
+          userId: user.id,
+        },
+      });
+    } catch (inngestErr) {
+      // Standalone/fallback runner: execute asynchronously without blocking HTTP response
+      executeDocumentExtraction(documentId, user.id).catch((err) => {
+        console.error("[Background Extraction Error]", err?.message || err);
+      });
     }
 
-    let detectedDocDate: string | null = null;
-    let detectedDocDateType: string | null = null;
-    let detectedPatientNamePrinted: string | null = null;
-    let detectedPatientNameLatin: string | null = null;
-    let detectedPatientDob: string | null = null;
-    let totalItemsCreated = 0;
-    let verifiedItemsCount = 0;
-    let primaryError: string | null = null;
-
-    const pageIds = pages.map((p) => p.id);
-
-    // Clean up previous unconfirmed extracted items for this document's pages to avoid duplicate entries on re-run
-    await supabase
-      .from("items")
-      .delete()
-      .eq("user_id", user.id)
-      .in("page_id", pageIds)
-      .eq("source", "extracted")
-      .neq("status", "confirmed");
-
-    // Fetch all existing items for this document's pages to update bounding boxes
-    const { data: existingDocItems } = await supabase
-      .from("items")
-      .select("id, category, value, quote, page_id, ocr_check")
-      .eq("user_id", user.id)
-      .in("page_id", pageIds);
-
-    // Check existing confirmed items to avoid duplicating already-confirmed patient records
-    const { data: existingConfirmed } = await supabase
-      .from("items")
-      .select("id, category, value")
-      .eq("user_id", user.id)
-      .eq("status", "confirmed");
-
-    const confirmedMap = new Map<string, string>(
-      (existingConfirmed || []).map(
-        (i) => [`${i.category}:${i.value.toLowerCase().replace(/[^\w]/g, "")}`, i.id]
-      )
-    );
-
-    // 7. Process each page
-    for (const page of pages) {
-
-      // Download page file from Supabase private storage
-      // Supports both {account_id}/{patient_id}/{doc_id}/page-n and legacy {user_id}/{doc_id}/page-n across all extensions (PDF, JPG, PNG, WEBP)
-      const patientFolder = document.patient_id
-        ? `${user.id}/${document.patient_id}/${documentId}`
-        : null;
-      const legacyFolder = `${user.id}/${documentId}`;
-      const docStoragePath = document.storage_path?.trim();
-
-      const candidateFolders = [patientFolder, docStoragePath, legacyFolder].filter(
-        Boolean
-      ) as string[];
-
-      let activeBlob: any = null;
-      let matchedPath = "";
-
-      // 1. Try listing files in candidate folders to find the exact filename (e.g. page-1.pdf, page-1.jpg, page-1.png)
-      for (const folder of candidateFolders) {
-        const { data: storageFiles } = await supabase.storage
-          .from("medical-records")
-          .list(folder);
-
-        if (storageFiles && storageFiles.length > 0) {
-          const prefix = `page-${page.page_no}.`;
-          const matchedFile = storageFiles.find((f) =>
-            f.name.toLowerCase().startsWith(prefix)
-          );
-          if (matchedFile) {
-            const fullPath = `${folder}/${matchedFile.name}`;
-            const { data: b } = await supabase.storage
-              .from("medical-records")
-              .download(fullPath);
-            if (b) {
-              activeBlob = b;
-              matchedPath = fullPath;
-              break;
-            }
-          }
-        }
-      }
-
-      // 2. Direct fallback across common extensions if listing was restricted or unavailable
-      if (!activeBlob) {
-        const extensions = ["pdf", "jpg", "jpeg", "png", "webp"];
-        const fallbackPaths: string[] = [];
-        for (const folder of candidateFolders) {
-          for (const ext of extensions) {
-            fallbackPaths.push(`${folder}/page-${page.page_no}.${ext}`);
-          }
-        }
-        if (docStoragePath && (docStoragePath.endsWith(".pdf") || docStoragePath.endsWith(".jpg"))) {
-          fallbackPaths.push(docStoragePath);
-        }
-
-        for (const p of fallbackPaths) {
-          const { data: b } = await supabase.storage
-            .from("medical-records")
-            .download(p);
-          if (b) {
-            activeBlob = b;
-            matchedPath = p;
-            break;
-          }
-        }
-      }
-
-      if (!activeBlob) {
-        console.error(
-          `[ExtractRoute] Failed to load file for page ${page.page_no}. Storage path: ${document.storage_path}`
-        );
-        throw new Error(`Failed to load page file for page ${page.page_no}`);
-      }
-
-      const arrayBuffer = await activeBlob.arrayBuffer();
-      const imageBuffer = Buffer.from(arrayBuffer);
-
-      const isPdf =
-        matchedPath.toLowerCase().endsWith(".pdf") ||
-        activeBlob.type === "application/pdf" ||
-        document.doc_type === "pdf";
-
-      // For raster image scans, optimize payload size (max 2048px width, quality 85) to accelerate vision upload
-      let visionBuffer = imageBuffer;
-      if (!isPdf && imageBuffer.length > 800 * 1024) {
-        try {
-          visionBuffer = await sharp(imageBuffer)
-            .resize({ width: 2048, withoutEnlargement: true })
-            .jpeg({ quality: 85 })
-            .toBuffer();
-        } catch {
-          visionBuffer = imageBuffer;
-        }
-      }
-
-      const base64 = visionBuffer.toString("base64");
-
-      const mimeType = isPdf
-        ? "application/pdf"
-        : activeBlob.type && activeBlob.type.startsWith("image/")
-        ? activeBlob.type
-        : "image/jpeg";
-
-      // Run Primary Vision Perception (Gemini) and Secondary OCR (Tesseract)
-      // Note: Tesseract processes raster images (JPEG/PNG). For PDFs, Gemini vision provides the primary verbatim OCR.
-      let extractionResult: any = null;
-      let secondaryOcrResult: TesseractResult | null = null;
-
-      const perceptionPromises: Promise<any>[] = [
-        provider.extractPage(base64, mimeType, page.page_no),
-      ];
-
-      if (!isPdf) {
-        perceptionPromises.push(
-          ocrPage(imageBuffer, { timeoutMs: 12000 }).catch((err) => {
-            console.warn("[ExtractRoute] Secondary OCR caught error:", err?.message || err);
-            return null;
-          })
-        );
-      }
-
-      const settledResults = await Promise.allSettled(perceptionPromises);
-      const geminiSettled = settledResults[0];
-      const ocrSettled = settledResults[1];
-
-      if (geminiSettled.status === "fulfilled") {
-        extractionResult = geminiSettled.value;
-      } else {
-        primaryError = geminiSettled.reason?.message || "Vision extraction failed";
-        console.warn("[ExtractRoute] Primary Gemini perception warning:", primaryError);
-      }
-
-      if (ocrSettled && ocrSettled.status === "fulfilled" && ocrSettled.value) {
-        secondaryOcrResult = ocrSettled.value;
-      } else if (ocrSettled) {
-        console.warn(
-          "[ExtractRoute] Secondary OCR warning:",
-          (ocrSettled as any).reason?.message || "Secondary OCR unavailable"
-        );
-      }
-
-      // If both readers failed, throw error so user is notified
-      if (!extractionResult && !secondaryOcrResult) {
-        throw new Error(primaryError || "Both primary and secondary perception readers failed.");
-      }
-
-      if (secondaryOcrResult) {
-        // Update bounding boxes and cross-checks for all existing items on this page (even if confirmed or omitted by Gemini)
-        const itemsToUpdate = (existingDocItems || []).filter(
-          (item) => item.page_id === page.id || (!item.page_id && item.quote)
-        );
-
-        for (const existingItem of itemsToUpdate) {
-          if (existingItem.quote) {
-            const check = crossCheckItem(existingItem, secondaryOcrResult);
-            await supabase
-              .from("items")
-              .update({
-                page_id: page.id,
-                ocr_check: check.ocrCheckPayload,
-                review_reason: check.state === "disagree" ? (check.reviewReason || "OCR disagreement") : null,
-              })
-              .eq("id", existingItem.id);
-          }
-        }
-      }
-
-      // If Gemini returned extractions, process and insert them
-      if (extractionResult) {
-        // Rule 4: Extract document date when present (distinguishing discharge vs signed date)
-        if (!detectedDocDate && extractionResult.doc_date) {
-          detectedDocDate = extractionResult.doc_date;
-          detectedDocDateType = extractionResult.doc_date_type || "unspecified";
-        }
-
-        // Feature A: Extract patient identity metadata
-        if (!detectedPatientNamePrinted && extractionResult.patient_name_as_printed) {
-          detectedPatientNamePrinted = extractionResult.patient_name_as_printed;
-        }
-        if (!detectedPatientNameLatin && extractionResult.patient_name_latin) {
-          detectedPatientNameLatin = extractionResult.patient_name_latin;
-        }
-        if (!detectedPatientDob && extractionResult.patient_dob) {
-          detectedPatientDob = extractionResult.patient_dob;
-        }
-
-        // Run Identity Matcher against active patient profile
-        const identityResult = matchPatientIdentity(
-          { full_name: profile?.full_name || "", dob: profile?.dob },
-          {
-            patient_name_as_printed: detectedPatientNamePrinted,
-            patient_name_latin: detectedPatientNameLatin,
-            patient_dob: detectedPatientDob,
-          }
-        );
-
-        // Rule 1: Quote Verification Gate (verifies quote appears in primary transcript)
-        const verification = verifyQuotesAgainstOcr(
-          extractionResult.items,
-          extractionResult.ocr_text
-        );
-
-        // Save OCR texts to page
-        const pageUpdateData: Record<string, any> = {
-          ocr_text: extractionResult.ocr_text,
-        };
-        if (secondaryOcrResult?.text) {
-          pageUpdateData.ocr_text_secondary = secondaryOcrResult.text;
-        }
-
-        try {
-          await supabase
-            .from("pages")
-            .update(pageUpdateData)
-            .eq("id", page.id);
-        } catch {
-          // Fallback if ocr_text_secondary column migration is pending
-          delete pageUpdateData.ocr_text_secondary;
-          await supabase
-            .from("pages")
-            .update(pageUpdateData)
-            .eq("id", page.id);
-        }
-
-        // Insert verified / needs_review items into database (deduplicated by category + normalized value)
-        const deduplicatedItems = deduplicateExtractedItems(verification.items);
-
-        if (deduplicatedItems.length > 0) {
-        const rowsToInsert = deduplicatedItems.map((item) => {
-          let itemStatus: "extracted" | "needs_review" = item.status;
-          let ocrCheckPayload: any = null;
-          let reviewReason: string | null = null;
-
-          // 3. Second-Reader Cross-Check Gate (for raster image scans with Tesseract)
-          if (secondaryOcrResult) {
-            const check = crossCheckItem(item, secondaryOcrResult);
-            ocrCheckPayload = check.ocrCheckPayload;
-
-            if (check.state === "disagree") {
-              // Mark needs_review with specific token disagreement reason; never delete the item
-              itemStatus = "needs_review";
-              reviewReason = check.reviewReason || "OCR disagreement";
-            }
-          } else {
-            // For PDFs or single-reader scans where secondary OCR is unavailable
-            ocrCheckPayload = {
-              state: "unavailable",
-              page_confidence: 95,
-              matched_tokens: [],
-              missing_tokens: [],
-              bounding_boxes: null,
-            };
-          }
-
-          // Rule A.3: Identity Mismatch Lock
-          // If mismatch: ALL items from that document become needs_review
-          if (identityResult.outcome === "mismatch") {
-            itemStatus = "needs_review";
-            reviewReason = "Report appears to be for someone else";
-          }
-
-          return {
-            user_id: user.id,
-            patient_id: document.patient_id || user.id,
-            page_id: page.id,
-            category: item.category,
-            value: item.value,
-            quote: item.quote,
-            confidence: item.confidence,
-            source: "extracted" as const,
-            // Rule 1 & 2: status is 'extracted' (if verified) or 'needs_review' (if quote unverified or OCR disagrees)
-            status: itemStatus,
-            normalization_source: item.normalization_source || "none",
-            ocr_check: ocrCheckPayload,
-            review_reason: reviewReason,
-          };
-        });
-
-        // Update existing confirmed items so they receive the newly computed OCR check and bounding boxes
-        for (const row of rowsToInsert) {
-          const key = `${row.category}:${row.value.toLowerCase().replace(/[^\w]/g, "")}`;
-          const confirmedId = confirmedMap.get(key);
-          if (confirmedId) {
-            try {
-              await supabase
-                .from("items")
-                .update({
-                  ocr_check: row.ocr_check,
-                  review_reason: row.review_reason,
-                  quote: row.quote,
-                  page_id: row.page_id,
-                })
-                .eq("id", confirmedId);
-            } catch {
-              // Silently ignore if column update fails
-            }
-          }
-        }
-
-        const nonDuplicateRows = rowsToInsert.filter((r) => {
-          const key = `${r.category}:${r.value.toLowerCase().replace(/[^\w]/g, "")}`;
-          return !confirmedMap.has(key);
-        });
-
-        if (nonDuplicateRows.length > 0) {
-          const { error: insertErr } = await supabase
-            .from("items")
-            .insert(nonDuplicateRows);
-
-          if (insertErr) {
-            // Fallback if ocr_check / review_reason columns are not yet applied in remote Supabase
-            const strippedRows = nonDuplicateRows.map((r) => {
-              const { ocr_check, review_reason, ...rest } = r;
-              return rest;
-            });
-            await supabase.from("items").insert(strippedRows);
-          }
-
-          totalItemsCreated += nonDuplicateRows.length;
-        }
-        verifiedItemsCount += deduplicatedItems.filter((i) => i.verified).length;
-      }
-    }
-  }
-
-    // 8. Update Document: mark ready, set doc_date if detected, and record identity verification
-    const finalIdentityResult = matchPatientIdentity(
-      { full_name: profile?.full_name || "", dob: profile?.dob },
-      {
-        patient_name_as_printed: detectedPatientNamePrinted,
-        patient_name_latin: detectedPatientNameLatin,
-        patient_dob: detectedPatientDob,
-      }
-    );
-
-    const updateDocData: Record<string, any> = {
-      status: "ready",
-      identity_status: finalIdentityResult.outcome,
-      identity_details: finalIdentityResult,
-      patient_name_as_printed: detectedPatientNamePrinted,
-      patient_name_latin: detectedPatientNameLatin,
-      patient_dob: detectedPatientDob,
-    };
-
-    if (detectedDocDate && !document.doc_date) {
-      updateDocData.doc_date = detectedDocDate;
-    }
-    if (detectedDocDateType) {
-      updateDocData.doc_date_type = detectedDocDateType;
-    }
-
-    if (finalIdentityResult.outcome === "mismatch") {
-      // Rule A.3: Mismatch -> ALL items from that document become needs_review
-      await supabase
-        .from("items")
-        .update({
-          status: "needs_review",
-          review_reason: "Report appears to be for someone else",
-        })
-        .eq("user_id", user.id)
-        .in("page_id", pageIds);
-    }
-
-    try {
-      await supabase
-        .from("documents")
-        .update(updateDocData)
-        .eq("id", documentId);
-    } catch {
-      // Fallback if identity / doc_date_type columns are not yet applied in DB
-      delete updateDocData.identity_status;
-      delete updateDocData.identity_details;
-      delete updateDocData.patient_name_as_printed;
-      delete updateDocData.patient_name_latin;
-      delete updateDocData.patient_dob;
-      delete updateDocData.doc_date_type;
-      await supabase
-        .from("documents")
-        .update(updateDocData)
-        .eq("id", documentId);
-    }
-
-    // Rule 7: Never log OCR text or extracted values!
+    // 5. Return immediately to the client
     return NextResponse.json({
       success: true,
       documentId,
-      status: "ready",
-      summary: {
-        totalItems: totalItemsCreated,
-        verifiedItems: verifiedItemsCount,
-        docDateDetected: detectedDocDate,
-      },
-      warning: primaryError ? `Note: ${primaryError}` : undefined,
+      status: "queued",
+      message: "We're reading your document. You can leave this page.",
     });
   } catch (err: any) {
-    console.error("[ExtractRoute Error]", err);
     return NextResponse.json(
-      { error: err.message || "Extraction process failed" },
+      { error: err?.message || "Failed to enqueue document for extraction" },
       { status: 500 }
     );
   }

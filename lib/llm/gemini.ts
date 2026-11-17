@@ -1,5 +1,10 @@
 import { ExtractedItem, LLMProvider, PageExtractionResult } from "./provider";
 
+interface GeminiModelInfo {
+  name: string; // e.g. "models/gemini-2.0-flash"
+  supportedGenerationMethods?: string[];
+}
+
 interface GeminiApiResponse {
   candidates?: Array<{
     content?: {
@@ -33,44 +38,141 @@ interface ExtractionPayload {
   }>;
 }
 
-// Ordered fallback chain: primary first, then fallbacks tried on 503/overload
-const GEMINI_MODEL_FALLBACK_CHAIN = [
-  "gemini-3.8-flash",
-  "gemini-2.5-flash",
-  "gemini-1.5-flash-002",
-];
+// In-memory cache for live Gemini list-models response (TTL: 1 hour)
+let cachedLiveModels: { timestamp: number; models: string[] } | null = null;
+const MODEL_CACHE_TTL_MS = 60 * 60 * 1000;
+
+export function clearLiveModelsCache(): void {
+  cachedLiveModels = null;
+}
+
+/**
+ * Queries the live Gemini API list-models endpoint to discover currently available models.
+ * Results are cached in memory for 1 hour to prevent redundant API queries.
+ */
+export async function getLiveGeminiModels(apiKey: string): Promise<string[]> {
+  const now = Date.now();
+  if (cachedLiveModels && now - cachedLiveModels.timestamp < MODEL_CACHE_TTL_MS) {
+    return cachedLiveModels.models;
+  }
+
+  const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
+  const response = await fetch(listUrl, {
+    method: "GET",
+    signal: AbortSignal.timeout(10000),
+  });
+
+  if (!response.ok) {
+    // Requirement 7: Log model/endpoint status code only
+    // eslint-disable-next-line no-console
+    console.log(`[Gemini ListModels] status=${response.status}`);
+    if (cachedLiveModels) return cachedLiveModels.models;
+    throw new Error(`Failed to retrieve live Gemini models list from API (HTTP ${response.status}).`);
+  }
+
+  const data = await response.json();
+  const rawList: GeminiModelInfo[] = data.models || [];
+
+  // Filter only models that support content generation and are not embedding-only
+  const available = rawList
+    .filter((m) => m.supportedGenerationMethods?.includes("generateContent"))
+    .map((m) => m.name.replace(/^models\//, ""))
+    .filter(
+      (name) =>
+        !name.includes("embedding") &&
+        !name.includes("aqa") &&
+        !name.includes("imagen")
+    );
+
+  cachedLiveModels = {
+    timestamp: now,
+    models: available,
+  };
+
+  return available;
+}
+
+/**
+ * Builds the dynamic model fallback chain strictly from the live list-models API response.
+ * Rule 1: No hardcoded model names in code.
+ * Rule 1: GEMINI_MODEL is set from environment; if unset or unavailable, throws clear error.
+ */
+export async function buildLiveModelChain(
+  apiKey: string,
+  envModelName?: string
+): Promise<{ primaryModel: string; chain: string[] }> {
+  const configured = (envModelName || process.env.GEMINI_MODEL || "").trim().replace(/^models\//, "");
+
+  if (!configured) {
+    throw new Error(
+      "GEMINI_MODEL environment variable is not configured. " +
+        "Please set GEMINI_MODEL in your environment variables (e.g. in Vercel project settings)."
+    );
+  }
+
+  const liveModels = await getLiveGeminiModels(apiKey);
+
+  if (!liveModels.includes(configured)) {
+    throw new Error(
+      `Configured GEMINI_MODEL "${configured}" is not available in the live Gemini API models list. ` +
+        `Available models supporting generateContent: ${liveModels.join(", ")}.`
+    );
+  }
+
+  // Dynamic fallback ordering without hardcoded names:
+  // Order remaining active models by prioritizing 'flash' and 'lite' variants first
+  const remaining = liveModels.filter((m) => m !== configured);
+  remaining.sort((a, b) => {
+    const aFast = a.includes("flash") || a.includes("lite") ? 1 : 0;
+    const bFast = b.includes("flash") || b.includes("lite") ? 1 : 0;
+    return bFast - aFast;
+  });
+
+  return {
+    primaryModel: configured,
+    chain: [configured, ...remaining],
+  };
+}
 
 export class GeminiProvider implements LLMProvider {
   private apiKey: string;
-  private model: string;
+  private configuredModel: string;
+  private modelChain: string[] = [];
+  private initialized = false;
 
   constructor(apiKey?: string, model?: string) {
     this.apiKey = apiKey || process.env.GEMINI_API_KEY || "";
-
-    let targetModel = (model || process.env.GEMINI_MODEL || "gemini-3.8-flash")
-      .trim()
-      .replace(/^models\//, "");
-
-    // Proactively normalize fully-retired/removed models to primary active model
-    const retiredModels = [
-      "gemini-2.0-flash",
-      "gemini-2.0-flash-exp",
-      "gemini-1.5-flash",
-      "gemini-1.5-flash-latest",
-      "gemini-1.5-pro",
-    ];
-
-    if (retiredModels.includes(targetModel)) {
-      targetModel = "gemini-3.8-flash";
-    }
-
-    this.model = targetModel;
-
     if (!this.apiKey) {
       throw new Error(
-        "GEMINI_API_KEY is not configured. Please set GEMINI_API_KEY in your environment or .env.local file."
+        "GEMINI_API_KEY is not configured. Please set GEMINI_API_KEY in your environment."
       );
     }
+
+    const envModel = (model || process.env.GEMINI_MODEL || "").trim().replace(/^models\//, "");
+    if (!envModel) {
+      throw new Error(
+        "GEMINI_MODEL environment variable is not configured. " +
+          "Please set GEMINI_MODEL in your environment variables."
+      );
+    }
+
+    this.configuredModel = envModel;
+  }
+
+  async initialize(): Promise<void> {
+    if (this.initialized) return;
+    const { primaryModel, chain } = await buildLiveModelChain(this.apiKey, this.configuredModel);
+    this.configuredModel = primaryModel;
+    this.modelChain = chain;
+    this.initialized = true;
+  }
+
+  getModelChain(): string[] {
+    return [...this.modelChain];
+  }
+
+  getPrimaryModel(): string {
+    return this.configuredModel;
   }
 
   async extractPage(
@@ -78,7 +180,7 @@ export class GeminiProvider implements LLMProvider {
     mimeType = "image/jpeg",
     pageNo = 1
   ): Promise<PageExtractionResult> {
-    let url = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${this.apiKey}`;
+    await this.initialize();
 
     const promptText = `
 You are a precise clinical document transcription and entity extraction engine.
@@ -134,8 +236,96 @@ CRITICAL RULES:
 4. Return strictly valid JSON adhering to the specified schema.
 `;
 
-    // Response schema for structured output
-    const responseSchema = {
+    const cleanBase64 = imageBase64.replace(/^data:[a-zA-Z0-9/+-]+;base64,/, "");
+
+    const body = {
+      contents: [
+        {
+          parts: [
+            { text: promptText },
+            {
+              inline_data: {
+                mime_type: mimeType,
+                data: cleanBase64,
+              },
+            },
+          ],
+        },
+      ],
+      generationConfig: {
+        responseMimeType: "application/json",
+        responseSchema: this.getResponseSchema(),
+        temperature: 0.1,
+        thinkingConfig: {
+          thinkingBudget: 0,
+        },
+      },
+    };
+
+    return this.executeWithModelChain(body, pageNo);
+  }
+
+  async extractFromText(
+    ocrText: string,
+    pageNo = 1,
+    readerSourceOverride?: string
+  ): Promise<PageExtractionResult> {
+    await this.initialize();
+
+    const promptText = `
+You are a precise clinical entity extraction engine.
+Analyze the following verbatim OCR document text and perform entity extraction adhering strictly to the text provided:
+
+TASK 1: CLINICAL ENTITY EXTRACTION
+Identify all distinct clinical entities belonging to these categories:
+- "medication": Drug names, formulations, doses, frequencies, routes
+- "condition": Diagnoses, symptoms, medical conditions, comorbidities
+- "allergy": Allergies or explicit allergy statements (e.g. NKDA, No Known Drug Allergies)
+- "surgery": Operations, surgical interventions, and invasive procedures (do NOT classify routine exams/consults as surgery)
+- "lab": Laboratory test results with findings and numeric values (do NOT extract bare tests ordered without results)
+- "implant": Medical devices, stents, implants, prosthetics
+
+TASK 2: DOCUMENT DATE & PATIENT IDENTITY
+Extract document date (doc_date YYYY-MM-DD), doc_date_type, doc_date_raw, patient_name_as_printed, patient_name_latin, and patient_dob if present.
+
+CRITICAL RULES:
+1. For every item, "quote" MUST be an EXACT word-for-word substring from the provided OCR text.
+2. Return strictly valid JSON adhering to the specified schema.
+
+VERBATIM OCR TEXT TO EXTRACT FROM:
+${ocrText}
+`;
+
+    const body = {
+      contents: [
+        {
+          parts: [{ text: promptText }],
+        },
+      ],
+      generationConfig: {
+        responseMimeType: "application/json",
+        responseSchema: this.getResponseSchema(),
+        temperature: 0.1,
+        thinkingConfig: {
+          thinkingBudget: 0,
+        },
+      },
+    };
+
+    const result = await this.executeWithModelChain(body, pageNo);
+    // Retain the full provided OCR text for the page
+    result.ocr_text = ocrText;
+    if (readerSourceOverride) {
+      result.reader_source = readerSourceOverride;
+      result.items.forEach((item) => {
+        item.reader_source = readerSourceOverride;
+      });
+    }
+    return result;
+  }
+
+  private getResponseSchema() {
+    return {
       type: "OBJECT",
       properties: {
         ocr_text: { type: "STRING" },
@@ -168,52 +358,22 @@ CRITICAL RULES:
       },
       required: ["ocr_text", "items"],
     };
+  }
 
-    // Remove data URL prefix if provided
-    const cleanBase64 = imageBase64.replace(/^data:[a-zA-Z0-9/+-]+;base64,/, "");
-
-    const body = {
-      contents: [
-        {
-          parts: [
-            { text: promptText },
-            {
-              inline_data: {
-                mime_type: mimeType,
-                data: cleanBase64,
-              },
-            },
-          ],
-        },
-      ],
-      generationConfig: {
-        responseMimeType: "application/json",
-        responseSchema,
-        temperature: 0.1,
-        thinkingConfig: {
-          thinkingBudget: 0,
-        },
-      },
-    };
-
+  private async executeWithModelChain(
+    body: any,
+    pageNo: number
+  ): Promise<PageExtractionResult> {
     let response: Response | null = null;
+    let successfulModel = this.configuredModel;
 
-    // Model fallback chain: on persistent 503/overload, cascade to next model
-    const modelChain = (() => {
-      const chain = [...GEMINI_MODEL_FALLBACK_CHAIN];
-      const startIdx = chain.indexOf(this.model);
-      // If current model is in chain, start from it; otherwise prepend it
-      return startIdx >= 0 ? chain.slice(startIdx) : [this.model, ...chain];
-    })();
-
-    for (let modelIdx = 0; modelIdx < modelChain.length; modelIdx++) {
-      const candidateModel = modelChain[modelIdx];
-      this.model = candidateModel;
-      url = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${this.apiKey}`;
+    for (let i = 0; i < this.modelChain.length; i++) {
+      const candidateModel = this.modelChain[i];
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${candidateModel}:generateContent?key=${this.apiKey}`;
 
       let attempts = 0;
-      const maxAttempts = 2; // 1 initial + 1 retry per model before cascading
-      let delayMs = 2000;
+      const maxAttempts = 2; // 1 initial + 1 retry per model
+      let delayMs = 1500;
       let modelFailed = false;
 
       while (attempts < maxAttempts) {
@@ -223,91 +383,66 @@ CRITICAL RULES:
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(body),
-            signal: AbortSignal.timeout(60000), // 60s timeout for complex clinical extractions
+            signal: AbortSignal.timeout(60000),
           });
 
+          // Requirement 7: Log model name, status code, and attempt count ONLY. No document content.
+          // eslint-disable-next-line no-console
+          console.log(
+            `[Gemini Extraction] model=${candidateModel} status=${response.status} attempt=${attempts}/${maxAttempts}`
+          );
+
           if (response.ok) {
+            successfulModel = candidateModel;
             break;
           }
 
-          // Auto-recover if model does not support thinkingConfig (400 Bad Request)
+          // Auto-recover if model rejects thinkingConfig (400 Bad Request)
           if (response.status === 400) {
             const errText = await response.text();
             if (
               (errText.includes("thinkingConfig") || errText.includes("thinkingBudget")) &&
-              (body.generationConfig as any)?.thinkingConfig
+              body.generationConfig?.thinkingConfig
             ) {
-              console.warn("[GeminiProvider] Model does not support thinkingConfig; retrying without it...");
-              delete (body.generationConfig as any).thinkingConfig;
+              delete body.generationConfig.thinkingConfig;
               continue;
             }
-
-            let errMsg = `Gemini API request failed with status 400`;
-            try {
-              const parsed = JSON.parse(errText);
-              if (parsed.error?.message) errMsg += `: ${parsed.error.message}`;
-            } catch {
-              errMsg += `: ${errText}`;
-            }
-            throw new Error(errMsg);
-          }
-
-          // Do NOT retry on 429 (rate limit / quota exceeded) — abort immediately
-          if (response.status === 429) {
-            const errText = await response.text();
-            let errMsg = `Gemini API request failed with status 429 (Quota Exceeded)`;
-            try {
-              const parsed = JSON.parse(errText);
-              if (parsed.error?.message) errMsg += `: ${parsed.error.message}`;
-            } catch {
-              errMsg += `: ${errText}`;
-            }
-            throw new Error(errMsg);
-          }
-
-          // 404 retired model → try next in chain
-          if (response.status === 404) {
-            console.warn(
-              `[GeminiProvider] Model '${this.model}' returned 404 (retired/unavailable). Cascading to next fallback...`
-            );
+            // Non-recoverable 400: break to next model or surface error
             modelFailed = true;
             break;
           }
 
-          // 503 / 5xx: retry once within this model, then cascade to next fallback
-          if (response.status === 503 || response.status >= 500) {
-            if (attempts < maxAttempts) {
+          // 404 or 503 / 5xx: cascade to next model in live chain
+          if (response.status === 404 || response.status === 503 || response.status >= 500) {
+            if (attempts < maxAttempts && response.status !== 404) {
               await new Promise((resolve) => setTimeout(resolve, delayMs));
               delayMs *= 2;
               continue;
             }
-            // Exhausted retries for this model → cascade to next
-            console.warn(
-              `[GeminiProvider] Model '${this.model}' returned ${response.status} after ${attempts} attempt(s). Cascading to next fallback...`
-            );
             modelFailed = true;
             break;
           }
 
-          const errText = await response.text();
-          let errMsg = `Gemini API request failed with status ${response.status}`;
-          try {
-            const parsed = JSON.parse(errText);
-            if (parsed.error?.message) errMsg += `: ${parsed.error.message}`;
-          } catch {
-            errMsg += `: ${errText}`;
+          // 429 Quota Exceeded: break immediately to allow higher-level queue retry
+          if (response.status === 429) {
+            modelFailed = true;
+            break;
           }
-          throw new Error(errMsg);
+
+          modelFailed = true;
+          break;
         } catch (err: any) {
-          // Do NOT retry on timeout (AbortError) or quota errors — surface immediately
-          if (err?.name === "AbortError" || err?.name === "TimeoutError" || err?.message?.includes("429")) {
-            throw err;
+          // Requirement 7: Log model name and attempt count only
+          // eslint-disable-next-line no-console
+          console.log(
+            `[Gemini Extraction] model=${candidateModel} error=${err?.name || "NetworkError"} attempt=${attempts}/${maxAttempts}`
+          );
+
+          if (err?.name === "AbortError" || err?.name === "TimeoutError") {
+            modelFailed = true;
+            break;
           }
           if (attempts >= maxAttempts) {
-            // Network-level failure after retries → cascade to next model
-            console.warn(
-              `[GeminiProvider] Model '${this.model}' network error after ${attempts} attempt(s): ${err?.message}. Cascading...`
-            );
             modelFailed = true;
             break;
           }
@@ -316,29 +451,22 @@ CRITICAL RULES:
         }
       }
 
-      // If this model succeeded (response.ok), exit the model fallback loop
       if (!modelFailed && response && response.ok) {
         break;
       }
-
-      // If last model in chain also failed, throw
-      if (modelIdx === modelChain.length - 1) {
-        throw new Error(
-          `All Gemini models in fallback chain (${modelChain.join(" → ")}) are unavailable or overloaded. Please try again later.`
-        );
-      }
-      // Otherwise continue to next model in chain
     }
 
     if (!response || !response.ok) {
-      throw new Error("Failed to receive a valid response from Gemini after model fallback.");
+      throw new Error(
+        `Gemini extraction request failed across dynamic live model chain (${this.modelChain.slice(0, 3).join(", ")}...).`
+      );
     }
 
     const json: GeminiApiResponse = await response.json();
     const candidateText = json.candidates?.[0]?.content?.parts?.[0]?.text;
 
     if (!candidateText) {
-      throw new Error("Gemini API returned an empty response.");
+      throw new Error("Gemini API returned an empty extraction candidate.");
     }
 
     let parsedResult: ExtractionPayload;
@@ -347,6 +475,9 @@ CRITICAL RULES:
     } catch (e: any) {
       throw new Error(`Failed to parse extraction JSON response: ${e.message}`);
     }
+
+    const isPrimary = successfulModel === this.configuredModel;
+    const readerSource = isPrimary ? "primary_vision" : "fallback_vision";
 
     const nonSurgicalKeywords = [
       "retinal exam",
@@ -360,7 +491,6 @@ CRITICAL RULES:
 
     const filteredRawItems = (parsedResult.items || []).filter((item) => {
       const valLower = (item.value || "").toLowerCase();
-      // Drop diagnostic exams or administrative items mislabeled as surgery
       if (item.category === "surgery" && nonSurgicalKeywords.some((e) => valLower.includes(e))) {
         return false;
       }
@@ -374,10 +504,9 @@ CRITICAL RULES:
       quote: item.quote,
       confidence: Math.min(1, Math.max(0, item.confidence ?? 0.8)),
       normalization_source: "none",
+      reader_source: readerSource,
     }));
 
-    // Rule 7: Never log OCR text or extracted values!
-    // We only log sanitized summary statistics
     return {
       ocr_text: parsedResult.ocr_text || "",
       doc_date: parsedResult.doc_date || null,
@@ -387,7 +516,8 @@ CRITICAL RULES:
       patient_name_latin: parsedResult.patient_name_latin || null,
       patient_dob: parsedResult.patient_dob || null,
       items,
-      model_version: json.modelVersion || this.model,
+      model_version: json.modelVersion || successfulModel,
+      reader_source: readerSource,
     };
   }
 }

@@ -199,6 +199,15 @@ export function DocumentUploadForm() {
         }
       }
 
+      setUploadProgress("Queuing clinical extraction...");
+      try {
+        await fetch(`/api/documents/${document_id}/extract`, {
+          method: "POST",
+        });
+      } catch {
+        // Even if network fails to trigger queue here, viewer will handle queueing
+      }
+
       setUploadProgress("Upload complete! Opening document...");
       router.push(`/documents/${document_id}`);
       router.refresh();

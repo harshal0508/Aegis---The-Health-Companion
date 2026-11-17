@@ -29,7 +29,7 @@ export interface DocumentSummary {
   storage_path: string;
   doc_type: string;
   doc_date: string | null;
-  status: "uploaded" | "processing" | "ready" | "failed";
+  status: "uploaded" | "queued" | "processing" | "ready" | "failed";
   page_count: number | null;
   created_at: string;
 }
@@ -223,13 +223,15 @@ export function DocumentsList({
                           }
                           className={`text-[10px] px-1.5 py-0 capitalize ${
                             doc.status === "ready"
-                              ? "bg-teal-600 hover:bg-teal-600"
-                              : doc.status === "uploaded"
-                              ? "bg-amber-100 text-amber-800 hover:bg-amber-100"
-                              : ""
+                              ? "bg-teal-600 hover:bg-teal-600 text-white"
+                              : doc.status === "failed"
+                              ? "bg-red-100 text-red-800"
+                              : doc.status === "queued" || doc.status === "processing"
+                              ? "bg-teal-100 text-teal-800 animate-pulse hover:bg-teal-100"
+                              : "bg-amber-100 text-amber-800 hover:bg-amber-100"
                           }`}
                         >
-                          {doc.status}
+                          {doc.status === "queued" ? "Queued" : doc.status === "processing" ? "Processing" : doc.status}
                         </Badge>
                       </div>
 
