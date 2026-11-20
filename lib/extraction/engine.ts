@@ -206,11 +206,11 @@ export async function executeDocumentExtraction(
         document.doc_type === "pdf";
 
       let visionBuffer = imageBuffer;
-      if (!isPdf && imageBuffer.length > 800 * 1024) {
+      if (!isPdf) {
         try {
           visionBuffer = await sharp(imageBuffer)
-            .resize({ width: 2048, withoutEnlargement: true })
-            .jpeg({ quality: 85 })
+            .resize({ width: 1600, height: 1600, fit: "inside", withoutEnlargement: true })
+            .jpeg({ quality: 80 })
             .toBuffer();
         } catch {
           visionBuffer = imageBuffer;

@@ -93,7 +93,8 @@ export async function getLiveGeminiModels(apiKey: string): Promise<string[]> {
         !name.endsWith("-image") &&
         !name.includes("-image-") &&
         !name.includes("banana") &&
-        !name.includes("computer-use")
+        !name.includes("computer-use") &&
+        !name.includes("omni")
     );
 
   cachedLiveModels = {
@@ -146,10 +147,11 @@ export async function buildLiveModelChain(
     const isPreview = name.includes("preview");
 
     if (isFlash && !isLite && isLatest) score += 95;   // gemini-flash-latest (primary preference)
-    if (isFlash && !isLite && !isPreview) score += 90; // full flash: gemini-3.5-flash, gemini-3.6-flash, etc.
-    if (isFlash && !isLite && isPreview) score += 75;  // preview flash: gemini-3-flash-preview
-    if (isLite && !isPreview) score += 30;             // lite models (fallback)
-    if (isLite && isPreview) score += 20;              // preview lite models
+    if (isFlash && !isLite && !isPreview) score += 90; // full flash: gemini-3.8-flash, 3.5, 3.6, etc.
+    if (isFlash && isLite && isLatest) score += 88;    // gemini-flash-lite-latest (fast multimodal, reliable)
+    if (isFlash && isLite && !isPreview) score += 85;  // full flash-lite
+    if (isFlash && !isLite && isPreview) score += 75;  // preview flash
+    if (isLite && isPreview) score += 50;              // preview lite
     return score;
   };
 
@@ -162,10 +164,8 @@ export async function buildLiveModelChain(
   );
   remaining.sort((a, b) => scoreModel(b) - scoreModel(a));
 
-  // Cap the chain at 6 models to guarantee deep resilience against 503 spikes.
-  // 404s fail instantly in 80ms, 503s fail in ~3s. With maxDuration=120s on Vercel,
-  // 6 free Flash candidates provide optimal failover across different Flash version pools.
-  const chain = [configured, ...remaining].slice(0, 6);
+  // Cap the chain at 8 models for deep resilience against 503 spikes across different version pools.
+  const chain = [configured, ...remaining].slice(0, 8);
 
   return {
     primaryModel: configured,
@@ -426,7 +426,7 @@ ${ocrText}
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(modelBody),
-            signal: AbortSignal.timeout(45000),
+            signal: AbortSignal.timeout(35000),
           });
 
           // Requirement 7: Log model name, status code, and attempt count ONLY. No document content.
@@ -516,9 +516,9 @@ ${ocrText}
             break;
           }
 
-          // 503 / 5xx: cascade to next model in live chain
+          // 503 / 5xx: cascade immediately to next model (different serving cluster)
           if (response.status === 503 || response.status >= 500) {
-            if (attempts < maxAttempts) {
+            if (i === this.modelChain.length - 1 && attempts < maxAttempts) {
               await new Promise((resolve) => setTimeout(resolve, delayMs));
               delayMs *= 2;
               continue;
