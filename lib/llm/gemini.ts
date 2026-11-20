@@ -204,6 +204,9 @@ export class GeminiProvider implements LLMProvider {
     this.configuredModel = primaryModel;
     this.modelChain = chain;
     this.initialized = true;
+    // Requirement 7: Log chain for observability — no document content
+    // eslint-disable-next-line no-console
+    console.log(`[Gemini Chain] Built model chain: ${chain.join(", ")}`);
   }
 
   getModelChain(): string[] {
@@ -412,6 +415,9 @@ ${ocrText}
       const candidateModel = this.modelChain[i];
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${candidateModel}:generateContent?key=${this.apiKey}`;
 
+      // Deep-clone the body per model so thinkingConfig deletions don't bleed across models
+      let modelBody = JSON.parse(JSON.stringify(body));
+
       let attempts = 0;
       const maxAttempts = 2; // 1 initial + 1 retry per model
       let delayMs = 1500;
@@ -423,7 +429,7 @@ ${ocrText}
           const response = await fetch(url, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body),
+            body: JSON.stringify(modelBody),
             signal: AbortSignal.timeout(50000),
           });
 
@@ -456,14 +462,14 @@ ${ocrText}
               break;
             }
             // If vision model returned 200 but no OCR text or 0 extracted items, cascade if more candidates exist
-            const hasImage = body.contents?.[0]?.parts?.some((p: any) => p.inline_data);
+            const hasImage = modelBody.contents?.[0]?.parts?.some((p: any) => p.inline_data);
             if (hasImage && (!parsed.ocr_text || parsed.ocr_text.trim().length < 10)) {
               // eslint-disable-next-line no-console
               console.log(`[Gemini Extraction] model=${candidateModel} returned empty ocr_text (no vision capability) — cascading`);
               modelFailed = true;
               break;
             }
-            if (hasImage && (!parsed.items || parsed.items.length === 0) && i < this.modelChain.length - 1) {
+            if (hasImage && (!parsed.items || parsed.items.length === 0)) {
               // eslint-disable-next-line no-console
               console.log(`[Gemini Extraction] model=${candidateModel} extracted 0 items from image — cascading to next fallback`);
               modelFailed = true;
@@ -476,8 +482,8 @@ ${ocrText}
 
           // Auto-recover if model rejects thinkingConfig (400 Bad Request)
           if (response.status === 400) {
-            if (body.generationConfig?.thinkingConfig) {
-              delete body.generationConfig.thinkingConfig;
+            if (modelBody.generationConfig?.thinkingConfig) {
+              delete modelBody.generationConfig.thinkingConfig;
               continue;
             }
             modelFailed = true;
