@@ -174,10 +174,10 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
     init();
   }, [loadDocument]);
 
-  // Non-blocking status polling when document is 'queued' or 'processing'
+  // Non-blocking status polling when document is 'queued', 'processing', or newly 'uploaded'
   // Rule 3: "We're reading your document. You can leave this page." No spinner that blocks the page.
   useEffect(() => {
-    if (!document || (document.status !== "queued" && document.status !== "processing")) {
+    if (!document || (document.status !== "queued" && document.status !== "processing" && document.status !== "uploaded")) {
       return;
     }
 
@@ -665,6 +665,51 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
                       </>
                     )}
                   </Button>
+                </div>
+              ) : document.status === "ready" ? (
+                <div className="py-6 text-center space-y-4">
+                  <div className="h-10 w-10 rounded-full bg-teal-50 text-teal-600 flex items-center justify-center mx-auto">
+                    <Check className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900">
+                      Extraction Complete: No Clinical Records Found
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1 leading-relaxed max-w-sm mx-auto">
+                      The document text was transcribed successfully, but no active medications, diagnoses, allergies, or procedures were detected on this page.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-col gap-2 pt-2">
+                    <Button
+                      onClick={() => setShowOcrText(true)}
+                      variant="outline"
+                      size="sm"
+                      className="w-full text-xs text-teal-700 border-teal-200 hover:bg-teal-50"
+                    >
+                      <Eye className="h-3.5 w-3.5 mr-1.5" />
+                      View Transcribed OCR Text
+                    </Button>
+                    <Button
+                      onClick={handleExtract}
+                      disabled={extracting}
+                      variant="outline"
+                      size="sm"
+                      className="w-full text-xs text-gray-700 border-gray-300 hover:bg-gray-50"
+                    >
+                      {extracting ? (
+                        <>
+                          <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                          Re-extracting...
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="h-3.5 w-3.5 mr-1.5" />
+                          Re-run Extraction
+                        </>
+                      )}
+                    </Button>
+                  </div>
                 </div>
               ) : (
                 <div className="py-6 text-center space-y-4">

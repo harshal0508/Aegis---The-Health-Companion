@@ -399,12 +399,36 @@ export async function executeDocumentExtraction(
         .insert(nonDuplicateRows);
 
       if (insertErr) {
-        // Fallback if reader_source or ocr_check column is missing
+        // eslint-disable-next-line no-console
+        console.warn(`[Extraction Pipeline] Primary items insert warning:`, insertErr.message || insertErr);
+        // Fallback 1: strip reader_source, ocr_check, review_reason if columns missing
         const strippedRows = nonDuplicateRows.map((r) => {
           const { reader_source, ocr_check, review_reason, ...rest } = r;
           return rest;
         });
-        await supabase.from("items").insert(strippedRows);
+        const { error: strippedErr } = await supabase.from("items").insert(strippedRows);
+        if (strippedErr) {
+          // eslint-disable-next-line no-console
+          console.warn(`[Extraction Pipeline] Stripped items insert warning:`, strippedErr.message || strippedErr);
+          // Fallback 2: insert bare base schema rows
+          const bareRows = nonDuplicateRows.map((r) => ({
+            user_id: r.user_id,
+            category: r.category,
+            value: r.value,
+            quote: r.quote,
+            confidence: r.confidence,
+            source: r.source || "extracted",
+            status: r.status || "extracted",
+            normalization_source: r.normalization_source || "none",
+            page_id: r.page_id,
+          }));
+          const { error: bareErr } = await supabase.from("items").insert(bareRows);
+          if (bareErr) {
+            // eslint-disable-next-line no-console
+            console.error(`[Extraction Pipeline] Bare items insert error:`, bareErr.message || bareErr);
+            throw new Error(`Failed to save extracted items to database: ${bareErr.message}`);
+          }
+        }
       }
     }
 

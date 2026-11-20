@@ -48,17 +48,27 @@ export async function GET(
       );
     }
 
-    // 4. Fetch associated items
-    const { data: items } = await supabase
-      .from("items")
-      .select("id, category, value, quote, confidence, status, source, page_id, ocr_check, review_reason, reader_source")
-      .eq("user_id", user.id);
+    // 4. Fetch associated items for this document's pages
+    const pageIds = (pages || []).map((p) => p.id);
+    let documentItems: any[] = [];
 
-    // Filter items related to this document's pages
-    const pageIdSet = new Set((pages || []).map((p) => p.id));
-    const documentItems = (items || []).filter((item) =>
-      item.page_id ? pageIdSet.has(item.page_id) : false
-    );
+    if (pageIds.length > 0) {
+      const { data: directItems, error: itemsErr } = await supabase
+        .from("items")
+        .select("id, category, value, quote, confidence, status, source, page_id, ocr_check, review_reason, reader_source")
+        .in("page_id", pageIds);
+
+      if (itemsErr) {
+        // Fallback without newer columns if database migration not yet applied
+        const { data: fallbackItems } = await supabase
+          .from("items")
+          .select("id, category, value, quote, confidence, status, source, page_id")
+          .in("page_id", pageIds);
+        documentItems = fallbackItems || [];
+      } else {
+        documentItems = directItems || [];
+      }
+    }
 
     // 5. Generate signed read URLs for each page (valid for 15 minutes)
     // Files are located in the private storage bucket under {account_id}/{patient_id}/{document_id}/ or legacy {user_id}/{document_id}/
