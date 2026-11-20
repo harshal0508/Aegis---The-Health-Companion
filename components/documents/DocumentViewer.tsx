@@ -79,45 +79,145 @@ const TYPE_LABELS: Record<string, string> = {
   other: "Medical Document",
 };
 
-function renderHighlightedTranscript(text: string, quote: string | null) {
-  if (!quote || !quote.trim()) return text;
-  const q = quote.trim();
-  const lowerText = text.toLowerCase();
-  const lowerQ = q.toLowerCase();
-  const idx = lowerText.indexOf(lowerQ);
+function createQuoteRegex(query: string): RegExp | null {
+  if (!query || !query.trim()) return null;
+  const cleaned = query.trim().replace(/^[•\-*\d.)\s]+/g, "").trim();
+  const rawTokens = cleaned.split(/\s+/).filter(Boolean);
+  if (rawTokens.length === 0) return null;
 
-  if (idx !== -1) {
-    const before = text.slice(0, idx);
-    const match = text.slice(idx, idx + q.length);
-    const after = text.slice(idx + q.length);
-    return (
-      <>
-        {before}
-        <mark className="bg-amber-300 text-amber-950 font-bold px-1.5 py-0.5 rounded ring-2 ring-amber-400">
-          {match}
-        </mark>
-        {after}
-      </>
-    );
-  }
+  const tokenPatterns = rawTokens.map((tok) => {
+    // If token has number + unit (e.g. 500mg, 15mg)
+    const match = tok.match(/^(\d+(?:\.\d+)?)([a-zA-Z]+)$/);
+    if (match) {
+      return `${match[1]}\\s*${match[2]}`;
+    }
+    // Escape regex special characters
+    return tok.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  });
 
-  // Fallback: match first 3 words if multi-line whitespace/newlines differ
-  const words = q.split(/\s+/).slice(0, 3).join(" ");
-  if (words.length >= 3) {
-    const wordIdx = lowerText.indexOf(words.toLowerCase());
-    if (wordIdx !== -1) {
-      const before = text.slice(0, wordIdx);
-      const match = text.slice(wordIdx, wordIdx + words.length);
-      const after = text.slice(wordIdx + words.length);
+  return new RegExp(`(${tokenPatterns.join("[\\s\\W]+")})`, "i");
+}
+
+function renderHighlightedTranscript(
+  text: string,
+  quote: string | null,
+  fallbackValue?: string | null
+) {
+  if (!text) return null;
+  const primaryQuery = quote?.trim();
+  const secondaryQuery = fallbackValue?.trim();
+  const queriesToTry = [primaryQuery, secondaryQuery].filter(Boolean) as string[];
+
+  if (queriesToTry.length === 0) return text;
+
+  for (const q of queriesToTry) {
+    // 1. Exact case-insensitive substring match
+    const lowerText = text.toLowerCase();
+    const lowerQ = q.toLowerCase();
+    const exactIdx = lowerText.indexOf(lowerQ);
+
+    if (exactIdx !== -1) {
+      const before = text.slice(0, exactIdx);
+      const match = text.slice(exactIdx, exactIdx + q.length);
+      const after = text.slice(exactIdx + q.length);
       return (
         <>
           {before}
-          <mark className="bg-amber-300 text-amber-950 font-bold px-1.5 py-0.5 rounded ring-2 ring-amber-400">
+          <mark
+            id="active-ocr-highlight"
+            className="bg-amber-300 text-amber-950 font-bold px-1.5 py-0.5 rounded ring-2 ring-amber-400 animate-pulse"
+          >
             {match}
           </mark>
           {after}
         </>
       );
+    }
+
+    // 2. Flexible regex match (handles newlines, punctuation, number/unit spacing like 500 mg vs 500mg)
+    const regex = createQuoteRegex(q);
+    if (regex) {
+      const match = text.match(regex);
+      if (match && match.index !== undefined) {
+        const start = match.index;
+        const matchedStr = match[0];
+        const before = text.slice(0, start);
+        const after = text.slice(start + matchedStr.length);
+        return (
+          <>
+            {before}
+            <mark
+              id="active-ocr-highlight"
+              className="bg-amber-300 text-amber-950 font-bold px-1.5 py-0.5 rounded ring-2 ring-amber-400 animate-pulse"
+            >
+              {matchedStr}
+            </mark>
+            {after}
+          </>
+        );
+      }
+    }
+
+    // 3. Match base phrase if query has parentheses (e.g. "Diabetes Mellitus (ICD-10: E11.9)")
+    if (q.includes("(") && q.includes(")")) {
+      const basePhrase = q.replace(/\([^)]*\)/g, "").trim();
+      if (basePhrase.length >= 3) {
+        const baseRegex = createQuoteRegex(basePhrase);
+        if (baseRegex) {
+          const match = text.match(baseRegex);
+          if (match && match.index !== undefined) {
+            const start = match.index;
+            const matchedStr = match[0];
+            const before = text.slice(0, start);
+            const after = text.slice(start + matchedStr.length);
+            return (
+              <>
+                {before}
+                <mark
+                  id="active-ocr-highlight"
+                  className="bg-amber-300 text-amber-950 font-bold px-1.5 py-0.5 rounded ring-2 ring-amber-400 animate-pulse"
+                >
+                  {matchedStr}
+                </mark>
+                {after}
+              </>
+            );
+          }
+        }
+      }
+    }
+
+    // 4. Token fallback: match first 2 significant words
+    const significantWords = q
+      .replace(/^[•\-*\d.)\s]+/g, "")
+      .split(/\s+/)
+      .filter((w) => w.length >= 3 && !/^(tab|tablet|cap|capsule|po|od|bid|tid|qid|daily|prn)$/i.test(w))
+      .slice(0, 2);
+
+    if (significantWords.length >= 1) {
+      const partialPhrase = significantWords.join(" ");
+      const partialRegex = createQuoteRegex(partialPhrase);
+      if (partialRegex) {
+        const match = text.match(partialRegex);
+        if (match && match.index !== undefined) {
+          const start = match.index;
+          const matchedStr = match[0];
+          const before = text.slice(0, start);
+          const after = text.slice(start + matchedStr.length);
+          return (
+            <>
+              {before}
+              <mark
+                id="active-ocr-highlight"
+                className="bg-amber-300 text-amber-950 font-bold px-1.5 py-0.5 rounded ring-2 ring-amber-400 animate-pulse"
+              >
+                {matchedStr}
+              </mark>
+              {after}
+            </>
+          );
+        }
+      }
     }
   }
 
@@ -136,6 +236,7 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<boolean>(false);
   const [activeItemQuote, setActiveItemQuote] = useState<string | null>(null);
+  const [activeItemValue, setActiveItemValue] = useState<string | null>(null);
   const [activeItemId, setActiveItemId] = useState<string | null>(null);
   const [activeBoxes, setActiveBoxes] = useState<Array<{ x: number; y: number; w: number; h: number }> | null>(null);
   const [boxNotFound, setBoxNotFound] = useState<boolean>(false);
@@ -214,6 +315,7 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
   const handleSelectItem = (item: ItemData) => {
     setActiveItemId(item.id);
     setActiveItemQuote(item.quote);
+    setActiveItemValue(item.value);
     setShowOcrText(true);
 
     // If multi-page, switch to the item's page
@@ -233,6 +335,19 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
       setBoxNotFound(!currentPage?.is_pdf);
     }
   };
+
+  // Auto-scroll transcript to highlighted verbatim mark when active item changes
+  useEffect(() => {
+    if (activeItemId && showOcrText) {
+      const timer = setTimeout(() => {
+        const el = window.document.getElementById("active-ocr-highlight");
+        if (el) {
+          el.scrollIntoView({ block: "center", behavior: "smooth" });
+        }
+      }, 80);
+      return () => clearTimeout(timer);
+    }
+  }, [activeItemId, showOcrText]);
 
   // Re-sync active highlight boxes whenever document items update (e.g. after re-running extraction)
   useEffect(() => {
@@ -593,7 +708,7 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
                   Page {currentPageIndex + 1} Verbatim Transcription
                 </span>
                 <div className="flex items-center gap-2">
-                  {activeItemQuote && (
+                  {(activeItemQuote || activeItemValue) && (
                     <span className="text-[10px] text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 font-medium">
                       Quote highlighted
                     </span>
@@ -611,7 +726,7 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
               </div>
               {showOcrText && (
                 <div className="mt-2 p-3 bg-gray-50 rounded-lg text-gray-700 font-mono text-[11px] whitespace-pre-wrap max-h-60 overflow-y-auto border leading-relaxed select-text">
-                  {renderHighlightedTranscript(currentPage.ocr_text, activeItemQuote)}
+                  {renderHighlightedTranscript(currentPage.ocr_text, activeItemQuote, activeItemValue)}
                 </div>
               )}
             </div>
