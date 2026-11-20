@@ -29,6 +29,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatClinicalDate } from "@/lib/utils";
 import { isNegativeAllergy } from "@/lib/emergency/sanitizer";
+import { resolveClientScanBoxes } from "@/lib/ocr/client-locator";
 
 interface PageData {
   id: string;
@@ -240,6 +241,7 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
   const [activeItemId, setActiveItemId] = useState<string | null>(null);
   const [activeBoxes, setActiveBoxes] = useState<Array<{ x: number; y: number; w: number; h: number }> | null>(null);
   const [boxNotFound, setBoxNotFound] = useState<boolean>(false);
+  const [locatingOnScan, setLocatingOnScan] = useState<boolean>(false);
   const [extracting, setExtracting] = useState<boolean>(false);
   const [extractError, setExtractError] = useState<string | null>(null);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
@@ -312,17 +314,19 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
     }
   };
 
-  const handleSelectItem = (item: ItemData) => {
+  const handleSelectItem = async (item: ItemData) => {
     setActiveItemId(item.id);
     setActiveItemQuote(item.quote);
     setActiveItemValue(item.value);
     setShowOcrText(true);
 
     // If multi-page, switch to the item's page
+    let activePage = currentPage;
     if (item.page_id && pages.length > 0) {
       const pageIdx = pages.findIndex((p) => p.id === item.page_id);
       if (pageIdx !== -1 && pageIdx !== currentPageIndex) {
         setCurrentPageIndex(pageIdx);
+        activePage = pages[pageIdx];
       }
     }
 
@@ -330,9 +334,61 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
     if (boxes && boxes.length > 0) {
       setActiveBoxes(boxes);
       setBoxNotFound(false);
+      return;
+    }
+
+    // Client-side on-the-fly resolution if server OCR didn't produce boxes
+    if (activePage?.signed_url && !activePage.is_pdf) {
+      setLocatingOnScan(true);
+      setBoxNotFound(false);
+      setActiveBoxes(null);
+
+      try {
+        const resolved = await resolveClientScanBoxes(
+          activePage.signed_url,
+          item.quote,
+          item.value
+        );
+
+        if (resolved && resolved.length > 0) {
+          setActiveBoxes(resolved);
+          setBoxNotFound(false);
+
+          // Update item in local state
+          setItems((prev) =>
+            prev.map((i) =>
+              i.id === item.id
+                ? {
+                    ...i,
+                    ocr_check: {
+                      ...(i.ocr_check || { page_confidence: 90, matched_tokens: [], missing_tokens: [] }),
+                      state: "agree",
+                      bounding_boxes: resolved,
+                    },
+                  }
+                : i
+            )
+          );
+
+          // Background persist to server database
+          fetch(`/api/items/${item.id}/boxes`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ boxes: resolved }),
+          }).catch(() => {});
+        } else {
+          setActiveBoxes(null);
+          setBoxNotFound(true);
+        }
+      } catch {
+        setActiveBoxes(null);
+        setBoxNotFound(true);
+      } finally {
+        setLocatingOnScan(false);
+      }
     } else {
       setActiveBoxes(null);
-      setBoxNotFound(!currentPage?.is_pdf);
+      setBoxNotFound(!activePage?.is_pdf);
     }
   };
 
@@ -648,8 +704,16 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
                       />
                     ))}
 
+                  {/* Locating highlight in progress */}
+                  {locatingOnScan && (
+                    <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-slate-900/90 backdrop-blur text-white text-[11px] px-3.5 py-1.5 rounded-full shadow-lg pointer-events-none z-10 flex items-center gap-2 animate-pulse">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-teal-400" />
+                      <span>Pinpointing highlight on scan…</span>
+                    </div>
+                  )}
+
                   {/* Gentle status pill if scan coordinates are unavailable for this item */}
-                  {boxNotFound && activeItemId && (
+                  {boxNotFound && !locatingOnScan && activeItemId && (
                     <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-slate-900/80 backdrop-blur text-white text-[11px] px-3 py-1 rounded-full shadow pointer-events-none z-10 flex items-center gap-1.5 animate-in fade-in duration-200">
                       <Sparkles className="h-3 w-3 text-teal-400" />
                       <span>Scan box unavailable — quote highlighted in verbatim text below</span>
