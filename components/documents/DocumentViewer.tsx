@@ -785,9 +785,9 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
       </div>
 
       {/* Main viewer grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Document Canvas Column */}
-        <div className="lg:col-span-8 flex flex-col space-y-3">
+        <div className="lg:col-span-8 flex flex-col space-y-3 lg:sticky lg:top-4 lg:self-start lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto custom-scrollbar">
           {/* Viewer Controls */}
           <div className="flex items-center justify-between bg-gray-50 border rounded-xl px-4 py-2">
             <div className="flex items-center gap-2">
@@ -856,7 +856,7 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
           </div>
 
           {/* Canvas display */}
-          <div className="border rounded-xl bg-gray-100/70 p-4 min-h-[500px] flex items-center justify-center overflow-auto shadow-inner">
+          <div className="border rounded-xl bg-gray-100/70 p-4 min-h-[460px] max-h-[68vh] flex items-center justify-center overflow-auto shadow-inner">
             {currentPage?.is_pdf ? (
               <iframe
                 src={
@@ -994,9 +994,9 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
         </div>
 
         {/* Extracted Items & Provenance Column */}
-        <div className="lg:col-span-4 space-y-4">
-          <div className="bg-white border rounded-xl p-5 shadow-sm space-y-4">
-            <div className="flex items-center justify-between border-b pb-3">
+        <div className="lg:col-span-4 space-y-4 lg:sticky lg:top-4 lg:self-start">
+          <div className="bg-white border rounded-xl p-5 shadow-sm flex flex-col max-h-[calc(100vh-2rem)]">
+            <div className="flex items-center justify-between border-b pb-3 flex-shrink-0">
               <div className="flex items-center gap-2">
                 <Sparkles className="h-4 w-4 text-teal-600" />
                 <h2 className="text-sm font-bold uppercase tracking-wider text-gray-800">
@@ -1145,54 +1145,59 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
                 </div>
               )
             ) : (
-              <div className="space-y-3">
-                {(document.status === "queued" || document.status === "processing") && (
-                  <div className="p-3 rounded-lg bg-teal-50 border border-teal-200 text-teal-900 text-xs flex items-center gap-2">
-                    <div className="h-2 w-2 rounded-full bg-teal-600 animate-ping" />
-                    <span>We&apos;re reading your document. You can leave this page.</span>
-                  </div>
-                )}
-                {document.status === "failed" && (
-                  <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-900 text-xs space-y-2">
-                    <p className="font-semibold text-red-950">Extraction issue: {document.error_message}</p>
+              <div className="flex flex-col flex-1 min-h-0 pt-3">
+                <div className="flex-shrink-0 space-y-2 pb-3">
+                  {(document.status === "queued" || document.status === "processing") && (
+                    <div className="p-3 rounded-lg bg-teal-50 border border-teal-200 text-teal-900 text-xs flex items-center gap-2">
+                      <div className="h-2 w-2 rounded-full bg-teal-600 animate-ping" />
+                      <span>We&apos;re reading your document. You can leave this page.</span>
+                    </div>
+                  )}
+                  {document.status === "failed" && (
+                    <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-900 text-xs space-y-2">
+                      <p className="font-semibold text-red-950">Extraction issue: {document.error_message}</p>
+                      <Button
+                        onClick={handleExtract}
+                        disabled={extracting}
+                        size="sm"
+                        className="bg-red-600 hover:bg-red-700 text-white text-xs h-7 w-full"
+                      >
+                        Retry Extraction
+                      </Button>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between">
                     <Button
                       onClick={handleExtract}
                       disabled={extracting}
+                      variant="outline"
                       size="sm"
-                      className="bg-red-600 hover:bg-red-700 text-white text-xs h-7 w-full"
+                      className="w-full text-xs text-teal-700 border-teal-200 hover:bg-teal-50"
                     >
-                      Retry Extraction
+                      {extracting ? (
+                        <>
+                          <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                          Re-extracting...
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="h-3.5 w-3.5 mr-1.5" />
+                          Re-run Extraction
+                        </>
+                      )}
                     </Button>
                   </div>
-                )}
-                <div className="flex items-center justify-between pb-1">
-                  <Button
-                    onClick={handleExtract}
-                    disabled={extracting}
-                    variant="outline"
-                    size="sm"
-                    className="w-full text-xs text-teal-700 border-teal-200 hover:bg-teal-50"
-                  >
-                    {extracting ? (
-                      <>
-                        <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-                        Re-extracting...
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles className="h-3.5 w-3.5 mr-1.5" />
-                        Re-run Extraction
-                      </>
-                    )}
-                  </Button>
+
+                  {extractError && (
+                    <div className="text-xs text-rose-800 bg-rose-50 border border-rose-200 rounded-lg p-3 space-y-1">
+                      <p className="font-semibold text-rose-900">Extraction Issue:</p>
+                      <p>{extractError}</p>
+                    </div>
+                  )}
                 </div>
 
-                {extractError && (
-                  <div className="text-xs text-rose-800 bg-rose-50 border border-rose-200 rounded-lg p-3 space-y-1">
-                    <p className="font-semibold text-rose-900">Extraction Issue:</p>
-                    <p>{extractError}</p>
-                  </div>
-                )}
+                {/* Scrollable list of extracted records with dedicated scroll bar */}
+                <div className="overflow-y-auto flex-1 min-h-0 pr-1.5 space-y-3 custom-scrollbar overscroll-contain">
 
                 {items.map((item) => (
                   <div
@@ -1319,6 +1324,7 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
                     )}
                   </div>
                 ))}
+                </div>
               </div>
             )}
           </div>
