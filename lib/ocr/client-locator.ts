@@ -177,3 +177,35 @@ export async function resolveClientScanBoxes(
 
   return boxes;
 }
+
+/**
+ * Resolves bounding box coordinates for ALL document items from a page scan in one pass.
+ * Prevents redundant per-item OCR execution and allows instant highlighting across all items.
+ */
+export async function resolveAllClientScanBoxes(
+  imageUrl: string,
+  items: Array<{ id: string; quote: string | null; value: string | null }>
+): Promise<Record<string, NormalizedBox[]>> {
+  const ocrResult = await getClientPageOcr(imageUrl);
+  const map: Record<string, NormalizedBox[]> = {};
+
+  if (!ocrResult || !ocrResult.words || ocrResult.words.length === 0) {
+    for (const it of items) {
+      map[it.id] = [];
+    }
+    return map;
+  }
+
+  for (const it of items) {
+    let boxes: NormalizedBox[] | null = null;
+    if (it.quote) {
+      boxes = locateQuoteBoundingBoxes(it.quote, ocrResult);
+    }
+    if (!boxes && it.value) {
+      boxes = locateQuoteBoundingBoxes(it.value, ocrResult);
+    }
+    map[it.id] = boxes && boxes.length > 0 ? boxes : [];
+  }
+
+  return map;
+}

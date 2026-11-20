@@ -29,7 +29,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatClinicalDate } from "@/lib/utils";
 import { isNegativeAllergy } from "@/lib/emergency/sanitizer";
-import { resolveClientScanBoxes } from "@/lib/ocr/client-locator";
+import { resolveClientScanBoxes, resolveAllClientScanBoxes } from "@/lib/ocr/client-locator";
 
 interface PageData {
   id: string;
@@ -280,38 +280,78 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
         (data.pages || []).some((p: any) => !p.is_pdf) &&
         !locatingPromiseRef.current
       ) {
-        const firstPageSignedUrl = (data.pages || []).find((p: any) => !p.is_pdf)?.signed_url;
-        const p = fetch(`/api/documents/${documentId}/locate`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ signedUrl: firstPageSignedUrl }),
-        })
-          .then((r) => r.json())
-          .then((res) => {
-            if (res.success && res.located) {
-              for (const [id, b] of Object.entries(res.located)) {
+        const firstPage = (data.pages || []).find((p: any) => !p.is_pdf);
+        const firstPageSignedUrl = firstPage?.signed_url;
+        const proxyUrl = `/api/documents/${documentId}/image?page_no=${firstPage?.page_no || 1}`;
+
+        const p = (async () => {
+          try {
+            // 1. Try server locate first
+            const res = await fetch(`/api/documents/${documentId}/locate`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ signedUrl: firstPageSignedUrl }),
+            });
+            const sData = res.ok ? await res.json() : null;
+
+            if (sData?.success && sData.located && Object.keys(sData.located).length > 0) {
+              for (const [id, b] of Object.entries(sData.located)) {
                 boxesCacheRef.current[id] = b as any;
               }
               setItems((prev) =>
                 prev.map((i) =>
-                  res.located[i.id] !== undefined
+                  sData.located[i.id] !== undefined
                     ? {
                         ...i,
                         ocr_check: {
                           ...(i.ocr_check || { page_confidence: 90, matched_tokens: [], missing_tokens: [] }),
                           state: i.ocr_check?.state === "disagree" ? "disagree" : "agree",
-                          bounding_boxes: res.located[i.id],
+                          bounding_boxes: sData.located[i.id],
                         },
                       }
                     : i
                 )
               );
+              return;
             }
-          })
-          .catch(() => {})
-          .finally(() => {
+
+            // 2. Client fallback in background Web Worker if server OCR unavailable
+            const batchResolved = await resolveAllClientScanBoxes(proxyUrl, data.items || []);
+            for (const [id, b] of Object.entries(batchResolved)) {
+              boxesCacheRef.current[id] = b as any;
+            }
+            setItems((prev) =>
+              prev.map((i) =>
+                batchResolved[i.id] !== undefined
+                  ? {
+                      ...i,
+                      ocr_check: {
+                        ...(i.ocr_check || { page_confidence: 90, matched_tokens: [], missing_tokens: [] }),
+                        state: "agree",
+                        bounding_boxes: batchResolved[i.id],
+                      },
+                    }
+                  : i
+              )
+            );
+
+            // Persist resolved boxes to server
+            for (const [id, boxes] of Object.entries(batchResolved)) {
+              if (boxes && boxes.length > 0) {
+                fetch(`/api/items/${id}/boxes`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ boxes }),
+                }).catch(() => {});
+              }
+            }
+          } catch {
+            // Ignore background prefetch errors
+          } finally {
             locatingPromiseRef.current = null;
-          });
+          }
+        })();
+
         locatingPromiseRef.current = p;
       }
 
@@ -372,7 +412,6 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
     setActiveItemId(item.id);
     setActiveItemQuote(item.quote);
     setActiveItemValue(item.value);
-    setShowOcrText(true);
 
     // If multi-page, switch to the item's page
     let activePage = currentPage;
@@ -441,7 +480,7 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
 
         if (res.ok) {
           const data = await res.json();
-          if (data.located) {
+          if (data.located && Object.keys(data.located).length > 0) {
             // Update cache for ALL returned items at once
             for (const [id, b] of Object.entries(data.located)) {
               boxesCacheRef.current[id] = b as any;
@@ -475,39 +514,45 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
           }
         }
 
-        // 3. Client-side fallback using same-origin image proxy
+        // 4. Client-side batch fallback using same-origin image proxy: resolves ALL page items at once
         const proxyUrl = `/api/documents/${documentId}/image?page_no=${activePage.page_no}`;
-        const resolved = await resolveClientScanBoxes(
-          proxyUrl,
-          item.quote,
-          item.value
+        const pageItems = items.filter((it) => !it.page_id || it.page_id === activePage.id);
+        const batchResolved = await resolveAllClientScanBoxes(proxyUrl, pageItems);
+
+        for (const [id, b] of Object.entries(batchResolved)) {
+          boxesCacheRef.current[id] = b as any;
+        }
+
+        setItems((prev) =>
+          prev.map((i) =>
+            batchResolved[i.id] !== undefined
+              ? {
+                  ...i,
+                  ocr_check: {
+                    ...(i.ocr_check || { page_confidence: 90, matched_tokens: [], missing_tokens: [] }),
+                    state: "agree",
+                    bounding_boxes: batchResolved[i.id],
+                  },
+                }
+              : i
+          )
         );
 
+        // Background persist resolved boxes to server
+        for (const [id, boxes] of Object.entries(batchResolved)) {
+          if (boxes && boxes.length > 0) {
+            fetch(`/api/items/${id}/boxes`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ boxes }),
+            }).catch(() => {});
+          }
+        }
+
+        const resolved = batchResolved[item.id];
         if (resolved && resolved.length > 0) {
-          boxesCacheRef.current[item.id] = resolved;
           setActiveBoxes(resolved);
           setBoxNotFound(false);
-
-          setItems((prev) =>
-            prev.map((i) =>
-              i.id === item.id
-                ? {
-                    ...i,
-                    ocr_check: {
-                      ...(i.ocr_check || { page_confidence: 90, matched_tokens: [], missing_tokens: [] }),
-                      state: "agree",
-                      bounding_boxes: resolved,
-                    },
-                  }
-                : i
-            )
-          );
-
-          fetch(`/api/items/${item.id}/boxes`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ boxes: resolved }),
-          }).catch(() => {});
           return;
         }
 
@@ -527,15 +572,17 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
     }
   };
 
-  // Auto-scroll transcript to highlighted verbatim mark when active item changes
+  // Scroll within transcript box ONLY if user explicitly opened it — NEVER scroll the window!
   useEffect(() => {
     if (activeItemId && showOcrText) {
       const timer = setTimeout(() => {
+        const container = window.document.getElementById("ocr-transcript-container");
         const el = window.document.getElementById("active-ocr-highlight");
-        if (el) {
-          el.scrollIntoView({ block: "center", behavior: "smooth" });
+        if (container && el) {
+          const offset = el.offsetTop - container.offsetTop;
+          container.scrollTo({ top: Math.max(0, offset - 20), behavior: "smooth" });
         }
-      }, 80);
+      }, 50);
       return () => clearTimeout(timer);
     }
   }, [activeItemId, showOcrText]);
@@ -924,7 +971,10 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
                 </div>
               </div>
               {showOcrText && (
-                <div className="mt-2 p-3 bg-gray-50 rounded-lg text-gray-700 font-mono text-[11px] whitespace-pre-wrap max-h-60 overflow-y-auto border leading-relaxed select-text">
+                <div
+                  id="ocr-transcript-container"
+                  className="mt-2 p-3 bg-gray-50 rounded-lg text-gray-700 font-mono text-[11px] whitespace-pre-wrap max-h-60 overflow-y-auto border leading-relaxed select-text"
+                >
                   {renderHighlightedTranscript(currentPage.ocr_text, activeItemQuote, activeItemValue)}
                 </div>
               )}
