@@ -298,9 +298,6 @@ CRITICAL RULES:
         responseMimeType: "application/json",
         responseSchema: this.getResponseSchema(),
         temperature: 0.1,
-        thinkingConfig: {
-          thinkingBudget: 0,
-        },
       },
     };
 
@@ -348,9 +345,6 @@ ${ocrText}
         responseMimeType: "application/json",
         responseSchema: this.getResponseSchema(),
         temperature: 0.1,
-        thinkingConfig: {
-          thinkingBudget: 0,
-        },
       },
     };
 
@@ -430,7 +424,7 @@ ${ocrText}
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(modelBody),
-            signal: AbortSignal.timeout(50000),
+            signal: AbortSignal.timeout(25000),
           });
 
           // Requirement 7: Log model name, status code, and attempt count ONLY. No document content.
@@ -524,11 +518,8 @@ ${ocrText}
           );
 
           if (err?.name === "AbortError" || err?.name === "TimeoutError") {
-            if (attempts < maxAttempts) {
-              await new Promise((resolve) => setTimeout(resolve, delayMs));
-              delayMs *= 2;
-              continue;
-            }
+            // Cascade immediately on timeout — do NOT retry the same model.
+            // Retrying a timed-out model wastes the same budget again.
             modelFailed = true;
             break;
           }
