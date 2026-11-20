@@ -57,7 +57,7 @@ export class TesseractOcrProvider implements OcrProvider {
   }
 
   async recognize(imageBuffer: Buffer): Promise<OcrResult> {
-    const rawResult = await ocrPage(imageBuffer, { timeoutMs: 15000 });
+    const rawResult = await ocrPage(imageBuffer, { timeoutMs: 35000 });
     return {
       text: rawResult.text,
       words: rawResult.words,

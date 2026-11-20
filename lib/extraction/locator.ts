@@ -12,6 +12,20 @@ export function cleanWord(str: string): string {
 }
 
 /**
+ * Normalizes text to a compact stream of alphanumeric characters with OCR confusion mapping.
+ * Eliminates spacing, punctuation, bullets, and casing differences so merged or split tokens
+ * (e.g. "500mg" vs "500 mg") match perfectly.
+ */
+export function cleanCompact(str: string): string {
+  return str
+    .toLowerCase()
+    .replace(/[1li|]/g, "1")
+    .replace(/[0o]/g, "0")
+    .replace(/[5s]/g, "5")
+    .replace(/[^a-z0-9]/g, "");
+}
+
+/**
  * Checks if a candidate OCR word matches a target quote word:
  * - Numbers must match exactly.
  * - Words >= 4 characters allow edit distance <= 1 and OCR character confusions.
@@ -41,9 +55,12 @@ export function wordMatches(target: string, candidate: string): boolean {
  * normalized bounding box rectangles (0 to 1 percentage of image).
  *
  * SAFETY GUARANTEES:
- * 1. Coordinates are normalized against the processed image dimensions.
- * 2. Numbers must match exactly.
- * 3. Handles multi-line quotes (returns one box per line).
+ * 1. Multi-strategy matching:
+ *    - Strategy A: Character-stream sliding accumulation (immune to number/unit splits like "5mg" vs "5 mg").
+ *    - Strategy B: Word-level consecutive sequence and sliding window with edit distance.
+ *    - Strategy C: Parenthesis-stripped base phrase matching.
+ * 2. Coordinates are normalized against processed image dimensions (0-1).
+ * 3. Never produces negative widths or heights.
  * 4. Returns null if no confident match is found. NEVER guesses a location.
  */
 export function locateQuoteBoundingBoxes(
@@ -54,53 +71,92 @@ export function locateQuoteBoundingBoxes(
     return null;
   }
 
-  const rawQuoteWords = quote.trim().split(/\s+/);
-  const quoteWords = rawQuoteWords.map(cleanWord).filter(Boolean);
-
-  if (quoteWords.length === 0) return null;
-
   const ocrWords = tesseractResult.words;
-  const matchLen = quoteWords.length;
+
+  // Strip leading list punctuation from quote (e.g. "• Metformin", "- Tab. Amlodipine")
+  const strippedQuote = quote.trim().replace(/^[•\-*\d.)\s]+/g, "").trim();
+  const effectiveQuote = strippedQuote.length >= 2 ? strippedQuote : quote.trim();
+
+  // ── Strategy A: Character-Stream Sliding Accumulation ────────────────────────
+  // This solves number/unit splits ("5mg" vs "5" "mg"), hyphenations, and punctuation diffs.
+  const targetCompact = cleanCompact(effectiveQuote);
 
   let bestMatchedSlice: OcrWord[] | null = null;
 
-  // 1. Scan for consecutive word sequence match
-  for (let i = 0; i <= ocrWords.length - matchLen; i++) {
-    let matches = true;
-    for (let j = 0; j < matchLen; j++) {
-      if (!wordMatches(quoteWords[j], ocrWords[i + j].text)) {
-        matches = false;
-        break;
-      }
-    }
-    if (matches) {
-      bestMatchedSlice = ocrWords.slice(i, i + matchLen);
-      break;
-    }
-  }
+  if (targetCompact.length >= 2) {
+    for (let i = 0; i < ocrWords.length; i++) {
+      let accum = "";
+      for (let j = i; j < ocrWords.length; j++) {
+        const wClean = cleanCompact(ocrWords[j].text);
+        if (!wClean) continue;
+        accum += wClean;
 
-  // 2. Fallback: If full sequence fails, try sliding window with 80% threshold for long quotes (>= 4 words)
-  if (!bestMatchedSlice && quoteWords.length >= 4) {
-    let bestScore = 0;
-    const windowSize = quoteWords.length;
+        if (accum === targetCompact) {
+          bestMatchedSlice = ocrWords.slice(i, j + 1);
+          break;
+        }
 
-    for (let i = 0; i <= ocrWords.length - windowSize; i++) {
-      let score = 0;
-      for (let j = 0; j < windowSize; j++) {
-        if (wordMatches(quoteWords[j], ocrWords[i + j].text)) {
-          score++;
+        // Fuzzy match if lengths match within 1 char and length >= 5
+        if (Math.abs(accum.length - targetCompact.length) <= 1 && targetCompact.length >= 5) {
+          if (levenshteinDistance(accum, targetCompact) <= 1) {
+            bestMatchedSlice = ocrWords.slice(i, j + 1);
+            break;
+          }
+        }
+
+        if (accum.length > targetCompact.length + 8) {
+          break;
         }
       }
-      if (score / windowSize >= 0.8 && score > bestScore) {
-        bestScore = score;
-        bestMatchedSlice = ocrWords.slice(i, i + windowSize);
+      if (bestMatchedSlice) break;
+    }
+  }
+
+  // ── Strategy B: Word-Level Consecutive Sequence Match ────────────────────────
+  if (!bestMatchedSlice) {
+    const rawQuoteWords = effectiveQuote.split(/\s+/);
+    const quoteWords = rawQuoteWords.map(cleanWord).filter(Boolean);
+    const matchLen = quoteWords.length;
+
+    if (matchLen > 0) {
+      for (let i = 0; i <= ocrWords.length - matchLen; i++) {
+        let matches = true;
+        for (let j = 0; j < matchLen; j++) {
+          if (!wordMatches(quoteWords[j], ocrWords[i + j].text)) {
+            matches = false;
+            break;
+          }
+        }
+        if (matches) {
+          bestMatchedSlice = ocrWords.slice(i, i + matchLen);
+          break;
+        }
+      }
+
+      // Sliding window with 80% threshold for longer quotes (>= 4 words)
+      if (!bestMatchedSlice && matchLen >= 4) {
+        let bestScore = 0;
+        const windowSize = matchLen;
+
+        for (let i = 0; i <= ocrWords.length - windowSize; i++) {
+          let score = 0;
+          for (let j = 0; j < windowSize; j++) {
+            if (wordMatches(quoteWords[j], ocrWords[i + j].text)) {
+              score++;
+            }
+          }
+          if (score / windowSize >= 0.8 && score > bestScore) {
+            bestScore = score;
+            bestMatchedSlice = ocrWords.slice(i, i + windowSize);
+          }
+        }
       }
     }
   }
 
-  // 3. Fallback: If quote contains parentheses (e.g. "Hemoglobin A1c (HbA1c)"), try matching base phrase
-  if (!bestMatchedSlice && quote.includes("(") && quote.includes(")")) {
-    const basePhrase = quote.replace(/\([^)]*\)/g, "").trim();
+  // ── Strategy C: Strip Parentheses for Compound Descriptions ──────────────────
+  if (!bestMatchedSlice && effectiveQuote.includes("(") && effectiveQuote.includes(")")) {
+    const basePhrase = effectiveQuote.replace(/\([^)]*\)/g, "").trim();
     if (basePhrase.length >= 3) {
       const baseResult = locateQuoteBoundingBoxes(basePhrase, tesseractResult);
       if (baseResult) return baseResult;
@@ -111,7 +167,7 @@ export function locateQuoteBoundingBoxes(
     return null;
   }
 
-  // 3. Group matched words by lineIndex so multi-line quotes wrap cleanly
+  // ── Construct Line-Aware Bounding Boxes ──────────────────────────────────────
   const lineMap = new Map<number, OcrWord[]>();
   for (const w of bestMatchedSlice) {
     const lIdx = w.lineIndex ?? 0;
@@ -126,6 +182,7 @@ export function locateQuoteBoundingBoxes(
     let minY = 1;
     let maxX = 0;
     let maxY = 0;
+    let hasValidBox = false;
 
     for (const w of wordsOnLine) {
       const b =
@@ -141,13 +198,16 @@ export function locateQuoteBoundingBoxes(
 
       if (!b) continue;
 
+      hasValidBox = true;
       if (b.x < minX) minX = b.x;
       if (b.y < minY) minY = b.y;
       if (b.x + b.w > maxX) maxX = b.x + b.w;
       if (b.y + b.h > maxY) maxY = b.y + b.h;
     }
 
-    // Add 0.5% padding around text box for clear visual highlight
+    if (!hasValidBox || minX >= maxX || minY >= maxY) continue;
+
+    // Add 0.5% horizontal and 0.4% vertical padding around text box for clear visual highlight
     const padX = 0.005;
     const padY = 0.004;
 

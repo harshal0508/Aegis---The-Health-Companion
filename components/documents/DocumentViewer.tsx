@@ -215,6 +215,15 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
     setActiveItemId(item.id);
     setActiveItemQuote(item.quote);
     setShowOcrText(true);
+
+    // If multi-page, switch to the item's page
+    if (item.page_id && pages.length > 0) {
+      const pageIdx = pages.findIndex((p) => p.id === item.page_id);
+      if (pageIdx !== -1 && pageIdx !== currentPageIndex) {
+        setCurrentPageIndex(pageIdx);
+      }
+    }
+
     const boxes = item.ocr_check?.bounding_boxes;
     if (boxes && boxes.length > 0) {
       setActiveBoxes(boxes);
@@ -523,6 +532,14 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
                         title="Verbatim location on page scan"
                       />
                     ))}
+
+                  {/* Gentle status pill if scan coordinates are unavailable for this item */}
+                  {boxNotFound && activeItemId && (
+                    <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-slate-900/80 backdrop-blur text-white text-[11px] px-3 py-1 rounded-full shadow pointer-events-none z-10 flex items-center gap-1.5 animate-in fade-in duration-200">
+                      <Sparkles className="h-3 w-3 text-teal-400" />
+                      <span>Scan box unavailable — quote highlighted in verbatim text below</span>
+                    </div>
+                  )}
                 </div>
               </div>
             ) : (

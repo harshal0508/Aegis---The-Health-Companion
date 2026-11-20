@@ -57,16 +57,29 @@ export interface OcrOptions {
 const inMemoryCache = new Map<string, TesseractResult>();
 
 /**
- * Absolute path to the directory containing eng.traineddata.
- * Resolved at module load to avoid process.cwd() drift inside route handlers.
- * Falls back to undefined so Tesseract downloads from CDN if the file is absent.
- * tesseract.js is listed in serverExternalPackages in next.config.mjs so its
- * own __dirname-based worker-script path resolution is never broken by bundling.
+ * Dynamic resolution of directory containing eng.traineddata.
+ * Checks process.cwd(), relative paths, and /var/task for Vercel/Lambda environments.
  */
-const TESSERACT_LANG_PATH: string | undefined = (() => {
-  const localLangPath = path.join(process.cwd(), "eng.traineddata");
-  return fs.existsSync(localLangPath) ? process.cwd() : undefined;
-})();
+export function getTesseractLangPath(): string | undefined {
+  const candidates = [
+    path.join(process.cwd(), "eng.traineddata"),
+    path.resolve("eng.traineddata"),
+    path.join(__dirname, "eng.traineddata"),
+    path.join(__dirname, "..", "eng.traineddata"),
+    path.join(__dirname, "../..", "eng.traineddata"),
+    "/var/task/eng.traineddata",
+  ];
+  for (const candidate of candidates) {
+    try {
+      if (fs.existsSync(candidate)) {
+        return path.dirname(candidate);
+      }
+    } catch {
+      // Ignore filesystem permission errors
+    }
+  }
+  return undefined;
+}
 
 /**
  * Checks if tesseract-core wasm binaries are present on the filesystem.
@@ -79,10 +92,27 @@ export function isTesseractWasmAvailable(): boolean {
     const corePkg = require.resolve("tesseract.js-core/package.json");
     const coreDir = path.dirname(corePkg);
     const files = fs.readdirSync(coreDir);
-    return files.some((f) => f.endsWith(".wasm"));
+    if (files.some((f) => f.endsWith(".wasm"))) return true;
   } catch {
-    return false;
+    // Fall back to direct filesystem checks
   }
+
+  const altPaths = [
+    path.join(process.cwd(), "node_modules", "tesseract.js-core"),
+    path.resolve("node_modules/tesseract.js-core"),
+    "/var/task/node_modules/tesseract.js-core",
+  ];
+  for (const p of altPaths) {
+    try {
+      if (fs.existsSync(p)) {
+        const files = fs.readdirSync(p);
+        if (files.some((f) => f.endsWith(".wasm"))) return true;
+      }
+    } catch {
+      // Ignore
+    }
+  }
+  return false;
 }
 
 /**
@@ -145,7 +175,7 @@ export async function ocrPage(
 ): Promise<TesseractResult> {
   const timeoutMs =
     options.timeoutMs ??
-    (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME ? 15000 : 60000);
+    (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME ? 35000 : 60000);
   return Promise.race([
     runOcrPage(imageBuffer, options),
     new Promise<TesseractResult>((_, reject) =>
@@ -192,13 +222,18 @@ async function runOcrPage(
     throw new Error("Tesseract WASM binary unavailable in current runtime environment");
   }
 
+  const langPath = getTesseractLangPath();
   const workerConfig: Record<string, any> = {
-    langPath: TESSERACT_LANG_PATH,
+    langPath,
+    gzip: false,
     cacheMethod: "none",
   };
   if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
     workerConfig.cachePath = "/tmp";
   }
+
+  // eslint-disable-next-line no-console
+  console.log(`[Tesseract OCR] Initializing worker with langPath=${langPath || "CDN"}`);
 
   // 5. Run Tesseract Worker with explicit blocks output format enabled.
   // In Tesseract.js v5+, blocks/words/bboxes are only returned when requested via { blocks: true }.

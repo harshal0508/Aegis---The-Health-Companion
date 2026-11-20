@@ -381,10 +381,14 @@ export function crossCheckItem(
   const confidenceThreshold = options.confidenceThreshold ?? 60;
   const pageConfidence = tesseractResult.pageConfidence;
 
-  // 1. Compute bounding boxes for the quote (if quote is present)
-  const boundingBoxes = item.quote
+  // 1. Compute bounding boxes for the quote (with fallback to item value)
+  let boundingBoxes = item.quote
     ? locateQuoteBoundingBoxes(item.quote, tesseractResult)
     : null;
+
+  if (!boundingBoxes && item.value) {
+    boundingBoxes = locateQuoteBoundingBoxes(item.value, tesseractResult);
+  }
 
   const criticalTokens = extractCriticalTokens(item);
 

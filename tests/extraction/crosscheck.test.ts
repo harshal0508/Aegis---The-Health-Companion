@@ -341,6 +341,58 @@ describe("Phase 3 Second-Reader OCR Cross-Check", () => {
       const result = crossCheckItem(item, ocrWithBoxes);
       expect(result.boundingBoxes).toBeNull();
     });
+
+    it("locates bounding box when quote has joined number and unit (e.g. 5mg) while OCR has separate words", () => {
+      const ocrSplitTokens: TesseractResult = {
+        text: "Tab. Amlodipine 5 mg OD",
+        lines: [],
+        words: [
+          { text: "Tab.", lineIndex: 0, confidence: 95, bbox: { x0: 10, y0: 10, x1: 50, y1: 30 }, normalizedBbox: { x: 0.01, y: 0.01, w: 0.04, h: 0.02 } },
+          { text: "Amlodipine", lineIndex: 0, confidence: 95, bbox: { x0: 55, y0: 10, x1: 150, y1: 30 }, normalizedBbox: { x: 0.055, y: 0.01, w: 0.095, h: 0.02 } },
+          { text: "5", lineIndex: 0, confidence: 95, bbox: { x0: 155, y0: 10, x1: 170, y1: 30 }, normalizedBbox: { x: 0.155, y: 0.01, w: 0.015, h: 0.02 } },
+          { text: "mg", lineIndex: 0, confidence: 95, bbox: { x0: 172, y0: 10, x1: 195, y1: 30 }, normalizedBbox: { x: 0.172, y: 0.01, w: 0.023, h: 0.02 } },
+          { text: "OD", lineIndex: 0, confidence: 95, bbox: { x0: 200, y0: 10, x1: 230, y1: 30 }, normalizedBbox: { x: 0.2, y: 0.01, w: 0.03, h: 0.02 } },
+        ],
+        imageDimensions: { width: 1000, height: 1000 },
+        pageConfidence: 95,
+      };
+
+      const item = {
+        category: "medication",
+        value: "Amlodipine 5mg OD",
+        quote: "Amlodipine 5mg OD",
+      };
+
+      const result = crossCheckItem(item, ocrSplitTokens);
+      expect(result.boundingBoxes).not.toBeNull();
+      expect(result.boundingBoxes!.length).toBeGreaterThan(0);
+      expect(result.boundingBoxes![0].w).toBeGreaterThan(0.1);
+    });
+
+    it("falls back to item.value when item.quote is missing or not found on the page", () => {
+      const ocrSplitTokens: TesseractResult = {
+        text: "Patient prescribed Metformin 500 mg PO Daily",
+        lines: [],
+        words: [
+          { text: "Patient", lineIndex: 0, confidence: 95, bbox: { x0: 10, y0: 10, x1: 50, y1: 30 }, normalizedBbox: { x: 0.01, y: 0.01, w: 0.04, h: 0.02 } },
+          { text: "prescribed", lineIndex: 0, confidence: 95, bbox: { x0: 55, y0: 10, x1: 100, y1: 30 }, normalizedBbox: { x: 0.055, y: 0.01, w: 0.045, h: 0.02 } },
+          { text: "Metformin", lineIndex: 0, confidence: 95, bbox: { x0: 105, y0: 10, x1: 160, y1: 30 }, normalizedBbox: { x: 0.105, y: 0.01, w: 0.055, h: 0.02 } },
+          { text: "500", lineIndex: 0, confidence: 95, bbox: { x0: 165, y0: 10, x1: 185, y1: 30 }, normalizedBbox: { x: 0.165, y: 0.01, w: 0.02, h: 0.02 } },
+          { text: "mg", lineIndex: 0, confidence: 95, bbox: { x0: 187, y0: 10, x1: 205, y1: 30 }, normalizedBbox: { x: 0.187, y: 0.01, w: 0.018, h: 0.02 } },
+        ],
+        imageDimensions: { width: 1000, height: 1000 },
+        pageConfidence: 95,
+      };
+
+      const itemWithoutQuote = {
+        category: "medication",
+        value: "Metformin 500mg",
+      };
+
+      const result = crossCheckItem(itemWithoutQuote, ocrSplitTokens);
+      expect(result.boundingBoxes).not.toBeNull();
+      expect(result.boundingBoxes!.length).toBe(1);
+    });
   });
 
   describe("8. Route-Level Pipeline Fault Injection", () => {

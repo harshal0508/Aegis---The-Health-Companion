@@ -239,10 +239,26 @@ export async function executeDocumentExtraction(
       // 2. Execute Optional Second-Reader OCR (Tesseract or Azure Document Intelligence)
       if (ocrProvider && !isPdf) {
         try {
+          // eslint-disable-next-line no-console
+          console.log(`[Extraction Pipeline] Starting second-reader OCR using ${ocrProvider.name}...`);
           secondaryOcrResult = await ocrProvider.recognize(imageBuffer, mimeType);
-        } catch {
+          // eslint-disable-next-line no-console
+          console.log(
+            `[Extraction Pipeline] Second-reader OCR completed (${ocrProvider.name}): words=${secondaryOcrResult?.words?.length || 0} conf=${secondaryOcrResult?.confidence || 0}`
+          );
+        } catch (ocrErr: any) {
+          // eslint-disable-next-line no-console
+          console.warn(
+            `[Extraction Pipeline] Second-reader OCR failed (${ocrProvider?.name}):`,
+            ocrErr?.message || ocrErr
+          );
           secondaryOcrResult = null;
         }
+      } else {
+        // eslint-disable-next-line no-console
+        console.log(
+          `[Extraction Pipeline] Second-reader OCR skipped: ocrProvider=${ocrProvider?.name || "none"} isPdf=${isPdf}`
+        );
       }
 
       // 3. Fallback: If Vision extraction failed but OCR succeeded, use Text-Only Extraction Path
