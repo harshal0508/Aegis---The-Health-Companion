@@ -225,6 +225,17 @@ function renderHighlightedTranscript(
   return text;
 }
 
+async function safeJson(res: Response): Promise<any> {
+  const text = await res.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(
+      `Server returned status ${res.status}: ${text.slice(0, 100) || res.statusText}`
+    );
+  }
+}
+
 export function DocumentViewer({ documentId }: { documentId: string }) {
   const router = useRouter();
 
@@ -254,7 +265,7 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
       const res = await fetch(`/api/documents/${documentId}?t=${Date.now()}`, {
         cache: "no-store",
       });
-      const data = await res.json();
+      const data = await safeJson(res);
 
       if (!res.ok) {
         throw new Error(data.error || "Failed to load document");
@@ -292,7 +303,7 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ signedUrl: firstPageSignedUrl }),
             });
-            const sData = res.ok ? await res.json() : null;
+            const sData = res.ok ? await safeJson(res) : null;
 
             if (sData?.success && sData.located && Object.keys(sData.located).length > 0) {
               for (const [id, b] of Object.entries(sData.located)) {
@@ -395,7 +406,7 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
       const res = await fetch(`/api/documents/${documentId}/extract`, {
         method: "POST",
       });
-      const data = await res.json();
+      const data = await safeJson(res);
       if (!res.ok) {
         throw new Error(data.error || "Failed to queue extraction");
       }
@@ -479,7 +490,7 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
         const res = await fetchPromise;
 
         if (res.ok) {
-          const data = await res.json();
+          const data = await safeJson(res);
           if (data.located && Object.keys(data.located).length > 0) {
             // Update cache for ALL returned items at once
             for (const [id, b] of Object.entries(data.located)) {
@@ -506,7 +517,7 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
               setActiveBoxes(serverBoxes);
               setBoxNotFound(false);
               return;
-            } else {
+            } else if (data.serverOcrAvailable !== false) {
               setActiveBoxes(null);
               setBoxNotFound(true);
               return;
@@ -609,7 +620,7 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
         method: "POST",
       });
       if (!res.ok) {
-        const data = await res.json();
+        const data = await safeJson(res);
         throw new Error(data.error || "Failed to confirm item");
       }
       setItems((prev) =>
@@ -636,7 +647,7 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
       });
 
       if (!res.ok) {
-        const data = await res.json();
+        const data = await safeJson(res);
         throw new Error(data.error || "Failed to delete document");
       }
 

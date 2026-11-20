@@ -88,6 +88,12 @@ export function getTesseractLangPath(): string | undefined {
  * RuntimeError: Aborted in worker threads.
  */
 export function isTesseractWasmAvailable(): boolean {
+  // Serverless environments (e.g. AWS Lambda / Vercel) have strict memory/thread limits and do not
+  // support the multi-threaded C++ Emscripten WASM worker_threads, leading to SIGABRT crashes.
+  if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
+    return false;
+  }
+
   try {
     const coreEntry = require.resolve("tesseract.js-core");
     const coreDir = path.dirname(coreEntry);
@@ -111,8 +117,6 @@ export function isTesseractWasmAvailable(): boolean {
   const altPaths = [
     path.join(process.cwd(), "node_modules", "tesseract.js-core"),
     path.resolve("node_modules/tesseract.js-core"),
-    "/var/task/node_modules/tesseract.js-core",
-    "/var/task/.next/server/node_modules/tesseract.js-core",
     path.join(process.cwd(), ".next", "server", "node_modules", "tesseract.js-core"),
   ];
   for (const p of altPaths) {
@@ -126,13 +130,7 @@ export function isTesseractWasmAvailable(): boolean {
     }
   }
 
-  // Fallback: If tesseract.js package is resolvable in the Node runtime, permit OCR execution
-  try {
-    require.resolve("tesseract.js");
-    return true;
-  } catch {
-    return false;
-  }
+  return false;
 }
 
 /**

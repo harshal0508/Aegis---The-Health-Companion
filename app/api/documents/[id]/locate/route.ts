@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { downloadPageImageBuffer } from "@/lib/ocr/page-storage";
-import { ocrPage, type NormalizedBox } from "@/lib/ocr/tesseract";
+import { ocrPage, isTesseractWasmAvailable, type NormalizedBox } from "@/lib/ocr/tesseract";
 import { locateQuoteBoundingBoxes } from "@/lib/extraction/locator";
 
 export const maxDuration = 60;
@@ -93,6 +93,14 @@ export async function POST(
 
     if (unlocatedItems.length === 0) {
       return NextResponse.json({ success: true, located: existingLocated });
+    }
+
+    if (!isTesseractWasmAvailable()) {
+      return NextResponse.json({
+        success: true,
+        located: existingLocated,
+        serverOcrAvailable: false,
+      });
     }
 
     // Group unlocated items by page
