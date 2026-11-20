@@ -994,8 +994,8 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
         </div>
 
         {/* Extracted Items & Provenance Column */}
-        <div className="lg:col-span-4 space-y-4 lg:sticky lg:top-4 lg:self-start">
-          <div className="bg-white border rounded-xl p-5 shadow-sm flex flex-col max-h-[calc(100vh-2rem)]">
+        <div className="lg:col-span-4 lg:sticky lg:top-4 lg:self-start">
+          <div className="bg-white border rounded-xl p-5 shadow-sm flex flex-col lg:max-h-[calc(100vh-120px)]">
             <div className="flex items-center justify-between border-b pb-3 flex-shrink-0">
               <div className="flex items-center gap-2">
                 <Sparkles className="h-4 w-4 text-teal-600" />
@@ -1196,8 +1196,8 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
                   )}
                 </div>
 
-                {/* Scrollable list of extracted records with dedicated scroll bar */}
-                <div className="overflow-y-auto flex-1 min-h-0 pr-1.5 space-y-3 custom-scrollbar overscroll-contain">
+                {/* Scrollable list of extracted records with dedicated visible scroll bar */}
+                <div className="overflow-y-auto max-h-[62vh] lg:max-h-[calc(100vh-260px)] pr-2 space-y-3 custom-scrollbar overscroll-contain">
 
                 {items.map((item) => (
                   <div
@@ -1327,14 +1327,6 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
                 </div>
               </div>
             )}
-          </div>
-
-          {/* Privacy & Storage Note */}
-          <div className="rounded-xl border border-teal-100 bg-teal-50/40 p-4 text-xs text-gray-600 space-y-1">
-            <p className="font-semibold text-teal-900">Security Guarantee</p>
-            <p>
-              Stored in private bucket under <code className="text-[11px] font-mono text-teal-800">{document.storage_path}</code>. Access is strictly protected by Supabase Row Level Security.
-            </p>
           </div>
         </div>
       </div>

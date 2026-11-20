@@ -58,23 +58,26 @@
 }
 
 @layer utilities {
-  /* Thin custom scrollbar for cards & transcript */
+  /* Visible custom scrollbar for cards & transcript */
   .custom-scrollbar::-webkit-scrollbar {
-    width: 6px;
+    width: 8px;
+    height: 8px;
   }
   .custom-scrollbar::-webkit-scrollbar-track {
-    background: transparent;
-  }
-  .custom-scrollbar::-webkit-scrollbar-thumb {
-    background-color: rgba(148, 163, 184, 0.4);
+    background: #f1f5f9;
     border-radius: 9999px;
   }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background-color: #94a3b8;
+    border-radius: 9999px;
+    border: 2px solid #f1f5f9;
+  }
   .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-    background-color: rgba(100, 116, 139, 0.6);
+    background-color: #64748b;
   }
   .custom-scrollbar {
     scrollbar-width: thin;
-    scrollbar-color: rgba(148, 163, 184, 0.4) transparent;
+    scrollbar-color: #94a3b8 #f1f5f9;
   }
 
   /* Hide scrollbar for Chrome, Safari and Opera */
