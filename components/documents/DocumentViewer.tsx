@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -246,6 +246,8 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
   const [extractError, setExtractError] = useState<string | null>(null);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [showOcrText, setShowOcrText] = useState<boolean>(false);
+  const boxesCacheRef = useRef<Record<string, Array<{ x: number; y: number; w: number; h: number }>>>({});
+  const locatingPromiseRef = useRef<Promise<any> | null>(null);
 
   const loadDocument = useCallback(async () => {
     try {
@@ -262,17 +264,24 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
       setPages(data.pages || []);
       setItems(data.items || []);
 
-      // Pre-fetch missing bounding boxes in the background so all items are ready to highlight
+      for (const item of data.items || []) {
+        if (item.ocr_check?.bounding_boxes) {
+          boxesCacheRef.current[item.id] = item.ocr_check.bounding_boxes;
+        }
+      }
+
+      // Pre-fetch all bounding boxes in the background immediately so clicking any item is instant
       const hasUnlocated = (data.items || []).some(
         (i: any) => !i.ocr_check?.bounding_boxes || i.ocr_check.bounding_boxes.length === 0
       );
       if (
         hasUnlocated &&
         data.document?.status === "ready" &&
-        (data.pages || []).some((p: any) => !p.is_pdf)
+        (data.pages || []).some((p: any) => !p.is_pdf) &&
+        !locatingPromiseRef.current
       ) {
         const firstPageSignedUrl = (data.pages || []).find((p: any) => !p.is_pdf)?.signed_url;
-        fetch(`/api/documents/${documentId}/locate`, {
+        const p = fetch(`/api/documents/${documentId}/locate`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ signedUrl: firstPageSignedUrl }),
@@ -280,9 +289,12 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
           .then((r) => r.json())
           .then((res) => {
             if (res.success && res.located) {
+              for (const [id, b] of Object.entries(res.located)) {
+                boxesCacheRef.current[id] = b as any;
+              }
               setItems((prev) =>
                 prev.map((i) =>
-                  res.located[i.id]
+                  res.located[i.id] !== undefined
                     ? {
                         ...i,
                         ocr_check: {
@@ -296,7 +308,11 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
               );
             }
           })
-          .catch(() => {});
+          .catch(() => {})
+          .finally(() => {
+            locatingPromiseRef.current = null;
+          });
+        locatingPromiseRef.current = p;
       }
 
       return data;
@@ -368,22 +384,50 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
       }
     }
 
-    const boxes = item.ocr_check?.bounding_boxes;
-    if (boxes && boxes.length > 0) {
-      setActiveBoxes(boxes);
-      setBoxNotFound(false);
+    // 1. Instant cache check (< 0.1ms) - if already located, display immediately with 0 delay!
+    const cachedBoxes = boxesCacheRef.current[item.id] ?? item.ocr_check?.bounding_boxes;
+    if (cachedBoxes !== undefined && cachedBoxes !== null) {
+      if (cachedBoxes.length > 0) {
+        setActiveBoxes(cachedBoxes);
+        setBoxNotFound(false);
+      } else {
+        setActiveBoxes(null);
+        setBoxNotFound(true);
+      }
       return;
     }
 
-    // On-the-fly resolution if server OCR didn't produce boxes initially
+    // 2. If background locate is already in flight, await it to prevent duplicate requests
+    if (locatingPromiseRef.current) {
+      setLocatingOnScan(true);
+      setBoxNotFound(false);
+      setActiveBoxes(null);
+      try {
+        await locatingPromiseRef.current;
+      } catch {}
+      setLocatingOnScan(false);
+
+      const recheckedBoxes = boxesCacheRef.current[item.id] ?? item.ocr_check?.bounding_boxes;
+      if (recheckedBoxes !== undefined && recheckedBoxes !== null) {
+        if (recheckedBoxes.length > 0) {
+          setActiveBoxes(recheckedBoxes);
+          setBoxNotFound(false);
+        } else {
+          setActiveBoxes(null);
+          setBoxNotFound(true);
+        }
+        return;
+      }
+    }
+
+    // 3. If not yet resolved, request resolution from server locator
     if (activePage && !activePage.is_pdf) {
       setLocatingOnScan(true);
       setBoxNotFound(false);
       setActiveBoxes(null);
 
       try {
-        // 1. Try server-side locator endpoint first (has direct storage access, zero CORS)
-        const res = await fetch(`/api/documents/${documentId}/locate`, {
+        const fetchPromise = fetch(`/api/documents/${documentId}/locate`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -391,17 +435,21 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
             signedUrl: activePage?.signed_url || undefined,
           }),
         });
+        locatingPromiseRef.current = fetchPromise;
+
+        const res = await fetchPromise;
 
         if (res.ok) {
           const data = await res.json();
-          const serverBoxes = data.located?.[item.id];
-          if (serverBoxes && serverBoxes.length > 0) {
-            setActiveBoxes(serverBoxes);
-            setBoxNotFound(false);
+          if (data.located) {
+            // Update cache for ALL returned items at once
+            for (const [id, b] of Object.entries(data.located)) {
+              boxesCacheRef.current[id] = b as any;
+            }
 
             setItems((prev) =>
               prev.map((i) =>
-                data.located?.[i.id]
+                data.located?.[i.id] !== undefined
                   ? {
                       ...i,
                       ocr_check: {
@@ -413,11 +461,21 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
                   : i
               )
             );
-            return;
+
+            const serverBoxes = data.located[item.id];
+            if (serverBoxes && serverBoxes.length > 0) {
+              setActiveBoxes(serverBoxes);
+              setBoxNotFound(false);
+              return;
+            } else {
+              setActiveBoxes(null);
+              setBoxNotFound(true);
+              return;
+            }
           }
         }
 
-        // 2. Client-side fallback using same-origin image proxy (bypasses browser CORS restrictions)
+        // 3. Client-side fallback using same-origin image proxy
         const proxyUrl = `/api/documents/${documentId}/image?page_no=${activePage.page_no}`;
         const resolved = await resolveClientScanBoxes(
           proxyUrl,
@@ -426,10 +484,10 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
         );
 
         if (resolved && resolved.length > 0) {
+          boxesCacheRef.current[item.id] = resolved;
           setActiveBoxes(resolved);
           setBoxNotFound(false);
 
-          // Update item in local state
           setItems((prev) =>
             prev.map((i) =>
               i.id === item.id
@@ -445,7 +503,6 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
             )
           );
 
-          // Background persist to server database
           fetch(`/api/items/${item.id}/boxes`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -454,9 +511,11 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
           return;
         }
 
+        boxesCacheRef.current[item.id] = [];
         setActiveBoxes(null);
         setBoxNotFound(true);
       } catch {
+        boxesCacheRef.current[item.id] = [];
         setActiveBoxes(null);
         setBoxNotFound(true);
       } finally {

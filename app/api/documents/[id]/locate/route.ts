@@ -78,36 +78,20 @@ export async function POST(
       return NextResponse.json({ success: true, located: {} });
     }
 
-    // Fast-path: If single item requested and it already has bounding boxes, return immediately
-    if (targetItemId) {
-      const targetItem = items.find((i) => i.id === targetItemId);
-      const existingBoxes = targetItem?.ocr_check?.bounding_boxes;
-      if (existingBoxes && existingBoxes.length > 0) {
-        return NextResponse.json({
-          success: true,
-          located: { [targetItemId]: existingBoxes },
-        });
+    // Fast-path: If all items in document already have bounding boxes, return all immediately
+    const existingLocated: Record<string, NormalizedBox[]> = {};
+    for (const item of items) {
+      if (item.ocr_check?.bounding_boxes) {
+        existingLocated[item.id] = item.ocr_check.bounding_boxes;
       }
     }
 
-    // Filter items needing bounding boxes
     const unlocatedItems = items.filter((item) => {
-      if (targetItemId && item.id !== targetItemId) {
-        // Still allow locating items on the same page as targetItem
-        const target = items.find((i) => i.id === targetItemId);
-        if (target && item.page_id !== target.page_id) return false;
-      }
       const boxes = item.ocr_check?.bounding_boxes;
       return !boxes || boxes.length === 0;
     });
 
     if (unlocatedItems.length === 0) {
-      const existingLocated: Record<string, NormalizedBox[]> = {};
-      for (const item of items) {
-        if (item.ocr_check?.bounding_boxes) {
-          existingLocated[item.id] = item.ocr_check.bounding_boxes;
-        }
-      }
       return NextResponse.json({ success: true, located: existingLocated });
     }
 
@@ -119,7 +103,7 @@ export async function POST(
       itemsByPageId.get(pageId)!.push(item);
     }
 
-    const locatedMap: Record<string, NormalizedBox[]> = {};
+    const locatedMap: Record<string, NormalizedBox[]> = { ...existingLocated };
 
     for (const [pageId, pageItems] of itemsByPageId.entries()) {
       const page = pages.find((p) => p.id === pageId);
@@ -179,7 +163,9 @@ export async function POST(
           .eq("id", page.id);
       }
 
-      // Locate coordinates for each item
+      // Locate coordinates for each item on this page
+      const updatePromises: PromiseLike<any>[] = [];
+
       for (const item of pageItems) {
         let boxes: NormalizedBox[] | null = null;
         if (item.quote) {
@@ -189,23 +175,28 @@ export async function POST(
           boxes = locateQuoteBoundingBoxes(item.value, ocrResult);
         }
 
-        if (boxes && boxes.length > 0) {
-          locatedMap[item.id] = boxes;
+        const resolvedBoxes = boxes && boxes.length > 0 ? boxes : [];
+        locatedMap[item.id] = resolvedBoxes;
 
-          const currentCheck = item.ocr_check || {};
-          const updatedCheck = {
-            ...currentCheck,
-            page_confidence: currentCheck.page_confidence || ocrResult.pageConfidence || 90,
-            state: currentCheck.state === "disagree" ? "disagree" : "agree",
-            bounding_boxes: boxes,
-          };
+        const currentCheck = item.ocr_check || {};
+        const updatedCheck = {
+          ...currentCheck,
+          page_confidence: currentCheck.page_confidence || ocrResult.pageConfidence || 90,
+          state: currentCheck.state === "disagree" ? "disagree" : "agree",
+          bounding_boxes: resolvedBoxes,
+        };
 
-          await supabase
-            .from("items")
-            .update({ ocr_check: updatedCheck })
-            .eq("id", item.id);
-        }
+        updatePromises.push(
+          Promise.resolve(
+            supabase
+              .from("items")
+              .update({ ocr_check: updatedCheck })
+              .eq("id", item.id)
+          )
+        );
       }
+
+      await Promise.all(updatePromises);
     }
 
     return NextResponse.json({

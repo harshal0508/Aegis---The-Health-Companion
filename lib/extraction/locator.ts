@@ -73,8 +73,12 @@ export function locateQuoteBoundingBoxes(
 
   const ocrWords = tesseractResult.words;
 
-  // Strip leading list punctuation from quote (e.g. "• Metformin", "- Tab. Amlodipine")
-  const strippedQuote = quote.trim().replace(/^[•\-*\d.)\s]+/g, "").trim();
+  // Strip leading list punctuation and enclosing quotes from quote (e.g. "• Metformin", "\"Acute Bronchitis\"")
+  const strippedQuote = quote
+    .trim()
+    .replace(/^["'“”‘’«»`\[\]\(\)\s•\-*\d.)]+/g, "")
+    .replace(/["'“”‘’«»`\[\]\(\)\s.]+$/g, "")
+    .trim();
   const effectiveQuote = strippedQuote.length >= 2 ? strippedQuote : quote.trim();
 
   // ── Strategy A: Character-Stream Sliding Accumulation ────────────────────────
@@ -208,6 +212,77 @@ export function locateQuoteBoundingBoxes(
           }
         }
         if (bestMatchedSlice) break;
+      }
+    }
+  }
+
+  // ── Strategy F: Clinical Anchor Noun Matching ──────────────────────────────
+  // For phrases containing distinct clinical entities (e.g. "Acute Bronchitis",
+  // "Type 2 Diabetes Mellitus", "Severe Asthma"), find the core informative noun.
+  // If the core noun is present on the scan, locate it (and any adjacent modifying
+  // words on the same line), rather than failing completely.
+  if (!bestMatchedSlice) {
+    const rawWords = effectiveQuote.split(/\s+/).map(cleanWord).filter((w) => w.length >= 3);
+    const sortedByLen = [...rawWords].sort((a, b) => b.length - a.length);
+    const anchorWord = sortedByLen[0];
+
+    if (anchorWord && anchorWord.length >= 5) {
+      for (let i = 0; i < ocrWords.length; i++) {
+        const ocrW = cleanWord(ocrWords[i].text);
+        if (!ocrW) continue;
+
+        let isMatch = false;
+        if (ocrW === anchorWord) {
+          isMatch = true;
+        } else if (
+          Math.abs(ocrW.length - anchorWord.length) <= 1 &&
+          levenshteinDistance(ocrW, anchorWord) <= 1
+        ) {
+          isMatch = true;
+        } else if (
+          anchorWord.length >= 6 &&
+          ocrW.length >= 5 &&
+          (ocrW.startsWith(anchorWord.slice(0, 5)) || anchorWord.startsWith(ocrW.slice(0, 5)))
+        ) {
+          isMatch = true;
+        }
+
+        if (isMatch) {
+          const currentLineIdx = ocrWords[i].lineIndex ?? 0;
+          let startIdx = i;
+          let endIdx = i;
+
+          // Check previous word on same line
+          if (
+            startIdx > 0 &&
+            (ocrWords[startIdx - 1].lineIndex ?? 0) === currentLineIdx
+          ) {
+            const prevText = cleanWord(ocrWords[startIdx - 1].text);
+            const quoteHasPrev = rawWords.some(
+              (rw) => rw === prevText || (rw.length >= 4 && levenshteinDistance(rw, prevText) <= 2)
+            );
+            if (quoteHasPrev) {
+              startIdx = startIdx - 1;
+            }
+          }
+
+          // Check next word on same line
+          if (
+            endIdx < ocrWords.length - 1 &&
+            (ocrWords[endIdx + 1].lineIndex ?? 0) === currentLineIdx
+          ) {
+            const nextText = cleanWord(ocrWords[endIdx + 1].text);
+            const quoteHasNext = rawWords.some(
+              (rw) => rw === nextText || (rw.length >= 4 && levenshteinDistance(rw, nextText) <= 2)
+            );
+            if (quoteHasNext) {
+              endIdx = endIdx + 1;
+            }
+          }
+
+          bestMatchedSlice = ocrWords.slice(startIdx, endIdx + 1);
+          break;
+        }
       }
     }
   }

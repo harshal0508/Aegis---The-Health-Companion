@@ -154,13 +154,13 @@ export async function preprocessImage(imageBuffer: Buffer): Promise<{
   let targetWidth = metadata.width || 1000;
   let targetHeight = metadata.height || 1000;
 
-  if (metadata.width && metadata.width > 1200) {
+  if (metadata.width && metadata.width > 1400) {
     pipeline = pipeline.resize({
-      width: 1200,
+      width: 1400,
       withoutEnlargement: true,
     });
-    const ratio = 1200 / metadata.width;
-    targetWidth = 1200;
+    const ratio = 1400 / metadata.width;
+    targetWidth = 1400;
     targetHeight = Math.round((metadata.height || 1000) * ratio);
   } else if (metadata.width && metadata.width < 700) {
     pipeline = pipeline.resize({
