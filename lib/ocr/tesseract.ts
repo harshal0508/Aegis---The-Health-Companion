@@ -125,7 +125,14 @@ export function isTesseractWasmAvailable(): boolean {
       // Ignore
     }
   }
-  return false;
+
+  // Fallback: If tesseract.js package is resolvable in the Node runtime, permit OCR execution
+  try {
+    require.resolve("tesseract.js");
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**
