@@ -271,9 +271,11 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
         data.document?.status === "ready" &&
         (data.pages || []).some((p: any) => !p.is_pdf)
       ) {
+        const firstPageSignedUrl = (data.pages || []).find((p: any) => !p.is_pdf)?.signed_url;
         fetch(`/api/documents/${documentId}/locate`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ signedUrl: firstPageSignedUrl }),
         })
           .then((r) => r.json())
           .then((res) => {
@@ -384,7 +386,10 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
         const res = await fetch(`/api/documents/${documentId}/locate`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ itemId: item.id }),
+          body: JSON.stringify({
+            itemId: item.id,
+            signedUrl: activePage?.signed_url || undefined,
+          }),
         });
 
         if (res.ok) {

@@ -19,11 +19,15 @@ export async function POST(
   try {
     const { id: documentId } = await params;
     let targetItemId: string | null = null;
+    let targetSignedUrl: string | null = null;
 
     try {
       const body = await request.json();
       if (body && typeof body.itemId === "string") {
         targetItemId = body.itemId;
+      }
+      if (body && typeof body.signedUrl === "string") {
+        targetSignedUrl = body.signedUrl;
       }
     } catch {
       // Body is optional
@@ -121,14 +125,42 @@ export async function POST(
       const page = pages.find((p) => p.id === pageId);
       if (!page) continue;
 
-      const imageResult = await downloadPageImageBuffer(supabase, user.id, document, page.page_no);
-      if (!imageResult || imageResult.mimeType === "application/pdf") {
+      let imageBuffer: Buffer | null = null;
+      let mimeType = "image/jpeg";
+
+      // If client supplied signedUrl for this document/page, fetch directly (fastest, zero storage lookups)
+      if (targetSignedUrl && (!targetItemId || pageItems.some((i) => i.id === targetItemId))) {
+        try {
+          const sRes = await fetch(targetSignedUrl, { signal: AbortSignal.timeout(8000) });
+          if (sRes.ok) {
+            const ab = await sRes.arrayBuffer();
+            if (ab.byteLength > 100) {
+              imageBuffer = Buffer.from(ab);
+              const ct = sRes.headers.get("content-type");
+              if (ct) mimeType = ct;
+            }
+          }
+        } catch {
+          // Fall back to storage download
+        }
+      }
+
+      if (!imageBuffer) {
+        const imageResult = await downloadPageImageBuffer(supabase, user.id, document, page.page_no);
+        if (!imageResult || imageResult.mimeType === "application/pdf") {
+          continue;
+        }
+        imageBuffer = imageResult.buffer;
+        mimeType = imageResult.mimeType;
+      }
+
+      if (mimeType === "application/pdf") {
         continue;
       }
 
       let ocrResult: any = null;
       try {
-        ocrResult = await ocrPage(imageResult.buffer, { timeoutMs: 35000 });
+        ocrResult = await ocrPage(imageBuffer, { timeoutMs: 35000 });
       } catch (err: any) {
         // eslint-disable-next-line no-console
         console.warn(`[Locate Route] OCR failed for page ${page.page_no}:`, err?.message || err);

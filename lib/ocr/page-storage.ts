@@ -55,6 +55,32 @@ export async function downloadPageImageBuffer(
   }
 
   if (!activeBlob) {
+    const extensions = ["jpg", "jpeg", "png", "webp", "pdf"];
+    for (const folder of candidateFolders) {
+      for (const ext of extensions) {
+        const p = `${folder}/page-${pageNo}.${ext}`;
+        try {
+          const { data: sData } = await supabase.storage.from("medical-records").createSignedUrl(p, 60);
+          if (sData?.signedUrl) {
+            const resp = await fetch(sData.signedUrl);
+            if (resp.ok) {
+              const b = await resp.blob();
+              if (b.size > 100) {
+                activeBlob = b;
+                matchedFilename = `page-${pageNo}.${ext}`;
+                break;
+              }
+            }
+          }
+        } catch {
+          // Continue
+        }
+      }
+      if (activeBlob) break;
+    }
+  }
+
+  if (!activeBlob) {
     return null;
   }
 

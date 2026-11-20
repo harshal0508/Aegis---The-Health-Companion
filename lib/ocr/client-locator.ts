@@ -57,28 +57,50 @@ export async function getClientPageOcr(imageUrl: string): Promise<TesseractResul
   activeOcrUrl = imageUrl;
   activeOcrPromise = (async () => {
     try {
+      const absUrl = imageUrl.startsWith("http")
+        ? imageUrl
+        : new URL(imageUrl, window.location.href).href;
+
+      const imgResp = await fetch(absUrl);
+      if (!imgResp.ok) return null;
+      const imgBlob = await imgResp.blob();
+
+      let imgW = 1000;
+      let imgH = 1000;
+      if (typeof createImageBitmap !== "undefined") {
+        try {
+          const bitmap = await createImageBitmap(imgBlob);
+          imgW = bitmap.width || 1000;
+          imgH = bitmap.height || 1000;
+          bitmap.close();
+        } catch {
+          // Fall back to Image
+        }
+      }
+
+      if (imgW === 1000) {
+        const img = new Image();
+        img.src = URL.createObjectURL(imgBlob);
+        await new Promise<void>((res) => {
+          img.onload = () => {
+            imgW = img.naturalWidth || 1000;
+            imgH = img.naturalHeight || 1000;
+            res();
+          };
+          img.onerror = () => res();
+          setTimeout(res, 5000);
+        });
+      }
+
       const Tesseract = await loadBrowserTesseract();
       if (!Tesseract) return null;
 
-      // In browser, createWorker loads web worker + WASM from CDN automatically
       const worker = await Tesseract.createWorker("eng", 1, {
         cacheMethod: "none",
       });
 
-      const ret = await worker.recognize(imageUrl, {}, { text: true, blocks: true });
+      const ret = await worker.recognize(imgBlob, {}, { text: true, blocks: true });
       await worker.terminate();
-
-      // Determine natural image dimensions
-      const img = new Image();
-      img.crossOrigin = "anonymous";
-      img.src = imageUrl;
-      await new Promise<void>((res) => {
-        img.onload = () => res();
-        img.onerror = () => res();
-      });
-
-      const imgW = img.naturalWidth || 1000;
-      const imgH = img.naturalHeight || 1000;
 
       const words: OcrWord[] = [];
       let globalLineIdx = 0;
