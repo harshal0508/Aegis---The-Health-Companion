@@ -787,7 +787,7 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
       {/* Main viewer grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Document Canvas Column */}
-        <div className="lg:col-span-8 flex flex-col space-y-3 lg:sticky lg:top-4 lg:self-start lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto custom-scrollbar">
+        <div className="lg:col-span-8 flex flex-col space-y-3">
           {/* Viewer Controls */}
           <div className="flex items-center justify-between bg-gray-50 border rounded-xl px-4 py-2">
             <div className="flex items-center gap-2">
@@ -856,7 +856,7 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
           </div>
 
           {/* Canvas display */}
-          <div className="border rounded-xl bg-gray-100/70 p-4 min-h-[460px] max-h-[68vh] flex items-center justify-center overflow-auto shadow-inner">
+          <div className="border rounded-xl bg-gray-100/70 p-4 min-h-[500px] flex items-center justify-center shadow-inner">
             {currentPage?.is_pdf ? (
               <iframe
                 src={
