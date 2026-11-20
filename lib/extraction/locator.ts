@@ -163,6 +163,55 @@ export function locateQuoteBoundingBoxes(
     }
   }
 
+  // ── Strategy D: Colon/Dash prefix stripping (e.g. "Diagnosis: Type 2 Diabetes" -> "Type 2 Diabetes")
+  if (!bestMatchedSlice && /[:\-–—]\s+/.test(effectiveQuote)) {
+    const parts = effectiveQuote.split(/[:\-–—]\s+/);
+    for (let p = parts.length - 1; p >= 1; p--) {
+      const sub = parts.slice(p).join(" ").trim();
+      if (sub.length >= 3) {
+        const subResult = locateQuoteBoundingBoxes(sub, tesseractResult);
+        if (subResult) return subResult;
+      }
+    }
+  }
+
+  // ── Strategy E: Head phrase match (first 2-3 words containing core entity & dose)
+  if (!bestMatchedSlice) {
+    const rawWords = effectiveQuote.split(/\s+/).filter(Boolean);
+    if (rawWords.length >= 3) {
+      for (const take of [3, 2]) {
+        if (rawWords.length >= take) {
+          const headPhrase = rawWords.slice(0, take).join(" ");
+          if (headPhrase.length >= 4) {
+            const headCompact = cleanCompact(headPhrase);
+            if (headCompact.length >= 4) {
+              for (let i = 0; i < ocrWords.length; i++) {
+                let accum = "";
+                for (let j = i; j < ocrWords.length; j++) {
+                  const wClean = cleanCompact(ocrWords[j].text);
+                  if (!wClean) continue;
+                  accum += wClean;
+                  if (
+                    accum === headCompact ||
+                    (Math.abs(accum.length - headCompact.length) <= 1 &&
+                      headCompact.length >= 5 &&
+                      levenshteinDistance(accum, headCompact) <= 1)
+                  ) {
+                    bestMatchedSlice = ocrWords.slice(i, j + 1);
+                    break;
+                  }
+                  if (accum.length > headCompact.length + 6) break;
+                }
+                if (bestMatchedSlice) break;
+              }
+            }
+          }
+        }
+        if (bestMatchedSlice) break;
+      }
+    }
+  }
+
   if (!bestMatchedSlice || bestMatchedSlice.length === 0) {
     return null;
   }

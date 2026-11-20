@@ -9,7 +9,12 @@ const nextConfig = {
   // (worker script path) and native bindings inside sharp.
   serverExternalPackages: ["tesseract.js", "tesseract.js-core", "sharp"],
   outputFileTracingIncludes: {
-    "/*": [
+    "/**": [
+      "./node_modules/tesseract.js-core/**/*",
+      "./node_modules/tesseract.js/**/*",
+      "./eng.traineddata",
+    ],
+    "/api/**/*": [
       "./node_modules/tesseract.js-core/**/*",
       "./node_modules/tesseract.js/**/*",
       "./eng.traineddata",

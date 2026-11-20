@@ -34,6 +34,7 @@ async function loadBrowserTesseract(): Promise<any> {
     script.setAttribute("data-tesseract-cdn", "true");
     script.onload = () => resolve(window.Tesseract);
     script.onerror = () => reject(new Error("Failed to load Tesseract.js from CDN"));
+    setTimeout(() => reject(new Error("CDN load timeout")), 12000);
     document.head.appendChild(script);
   });
 }

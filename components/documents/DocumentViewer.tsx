@@ -261,6 +261,42 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
       setDocument(data.document);
       setPages(data.pages || []);
       setItems(data.items || []);
+
+      // Pre-fetch missing bounding boxes in the background so all items are ready to highlight
+      const hasUnlocated = (data.items || []).some(
+        (i: any) => !i.ocr_check?.bounding_boxes || i.ocr_check.bounding_boxes.length === 0
+      );
+      if (
+        hasUnlocated &&
+        data.document?.status === "ready" &&
+        (data.pages || []).some((p: any) => !p.is_pdf)
+      ) {
+        fetch(`/api/documents/${documentId}/locate`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        })
+          .then((r) => r.json())
+          .then((res) => {
+            if (res.success && res.located) {
+              setItems((prev) =>
+                prev.map((i) =>
+                  res.located[i.id]
+                    ? {
+                        ...i,
+                        ocr_check: {
+                          ...(i.ocr_check || { page_confidence: 90, matched_tokens: [], missing_tokens: [] }),
+                          state: i.ocr_check?.state === "disagree" ? "disagree" : "agree",
+                          bounding_boxes: res.located[i.id],
+                        },
+                      }
+                    : i
+                )
+              );
+            }
+          })
+          .catch(() => {});
+      }
+
       return data;
     } catch (err: any) {
       setError(err.message || "Failed to load document");
@@ -337,15 +373,49 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
       return;
     }
 
-    // Client-side on-the-fly resolution if server OCR didn't produce boxes
-    if (activePage?.signed_url && !activePage.is_pdf) {
+    // On-the-fly resolution if server OCR didn't produce boxes initially
+    if (activePage && !activePage.is_pdf) {
       setLocatingOnScan(true);
       setBoxNotFound(false);
       setActiveBoxes(null);
 
       try {
+        // 1. Try server-side locator endpoint first (has direct storage access, zero CORS)
+        const res = await fetch(`/api/documents/${documentId}/locate`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ itemId: item.id }),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          const serverBoxes = data.located?.[item.id];
+          if (serverBoxes && serverBoxes.length > 0) {
+            setActiveBoxes(serverBoxes);
+            setBoxNotFound(false);
+
+            setItems((prev) =>
+              prev.map((i) =>
+                data.located?.[i.id]
+                  ? {
+                      ...i,
+                      ocr_check: {
+                        ...(i.ocr_check || { page_confidence: 90, matched_tokens: [], missing_tokens: [] }),
+                        state: i.ocr_check?.state === "disagree" ? "disagree" : "agree",
+                        bounding_boxes: data.located[i.id],
+                      },
+                    }
+                  : i
+              )
+            );
+            return;
+          }
+        }
+
+        // 2. Client-side fallback using same-origin image proxy (bypasses browser CORS restrictions)
+        const proxyUrl = `/api/documents/${documentId}/image?page_no=${activePage.page_no}`;
         const resolved = await resolveClientScanBoxes(
-          activePage.signed_url,
+          proxyUrl,
           item.quote,
           item.value
         );
@@ -376,10 +446,11 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ boxes: resolved }),
           }).catch(() => {});
-        } else {
-          setActiveBoxes(null);
-          setBoxNotFound(true);
+          return;
         }
+
+        setActiveBoxes(null);
+        setBoxNotFound(true);
       } catch {
         setActiveBoxes(null);
         setBoxNotFound(true);
@@ -676,14 +747,14 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
                 className="w-full h-[650px] rounded-lg border bg-white shadow-sm"
                 title={`PDF Document - Page ${currentPageIndex + 1}`}
               />
-            ) : currentPage?.signed_url ? (
+            ) : (currentPage?.signed_url || currentPage) ? (
               <div
                 className="transition-transform duration-150 flex items-center justify-center max-w-full"
                 style={{ transform: `scale(${zoomLevel / 100})`, transformOrigin: "top center" }}
               >
                 <div className="relative inline-block max-w-full">
                   <img
-                    src={currentPage.signed_url}
+                    src={currentPage.signed_url || `/api/documents/${documentId}/image?page_no=${currentPage.page_no}`}
                     alt={`Page ${currentPageIndex + 1}`}
                     className="max-w-full h-auto rounded-lg shadow-md border bg-white block select-none"
                   />

@@ -89,6 +89,17 @@ export function getTesseractLangPath(): string | undefined {
  */
 export function isTesseractWasmAvailable(): boolean {
   try {
+    const coreEntry = require.resolve("tesseract.js-core");
+    const coreDir = path.dirname(coreEntry);
+    if (fs.existsSync(coreDir)) {
+      const files = fs.readdirSync(coreDir);
+      if (files.some((f) => f.endsWith(".wasm"))) return true;
+    }
+  } catch {
+    // Fall back to package.json resolution
+  }
+
+  try {
     const corePkg = require.resolve("tesseract.js-core/package.json");
     const coreDir = path.dirname(corePkg);
     const files = fs.readdirSync(coreDir);
@@ -101,6 +112,8 @@ export function isTesseractWasmAvailable(): boolean {
     path.join(process.cwd(), "node_modules", "tesseract.js-core"),
     path.resolve("node_modules/tesseract.js-core"),
     "/var/task/node_modules/tesseract.js-core",
+    "/var/task/.next/server/node_modules/tesseract.js-core",
+    path.join(process.cwd(), ".next", "server", "node_modules", "tesseract.js-core"),
   ];
   for (const p of altPaths) {
     try {
