@@ -233,8 +233,8 @@ Extract all visible textual content in this image verbatim into "ocr_text". Reta
 
 TASK 2: CLINICAL ENTITY EXTRACTION
 Identify all distinct clinical entities belonging to these categories:
-- "medication": Drug names, formulations, doses, frequencies, routes (e.g., "Meloxicam 15mg PO Daily", "Paracetamol 650mg TDS")
-- "condition": Diagnoses, symptoms, medical conditions, comorbidities (e.g., "Osteoarthritis of Knee", "Type 2 Diabetes Mellitus")
+- "medication": Drug names, formulations, doses, frequencies, routes, oral/IV/topical treatments, injections, inhalers, or discharge advice (e.g., "Meloxicam 15mg PO Daily", "Paracetamol 650mg TDS", "Tab Augmentin 625mg", "Inj Pantoprazole 40mg"). Look across Rx, Treatment, Discharge Medications, Advice, or Prescription sections.
+- "condition": Diagnoses, symptoms, clinical findings, comorbidities, admission complaints, or discharge diagnoses (e.g., "Osteoarthritis of Knee", "Type 2 Diabetes Mellitus", "Hypertension", "Dengue Fever", "Acute Bronchitis", "Fever with chills", "Headache"). Look across Diagnosis, Provisional Diagnosis, Final Diagnosis, Impression, Chief Complaints, History, or Assessment sections.
 - "allergy": Allergies or explicit allergy statements:
   * If the document explicitly states "NKDA", "No known drug allergies", or "NKA":
     - If a document date or signature date is explicitly printed on this page, store value as: "No known drug allergies, per document, YYYY-MM-DD"
@@ -404,6 +404,8 @@ ${ocrText}
     let lastResponse: Response | null = null;
     let successfulModel = this.configuredModel;
     let parsedResult: ExtractionPayload | null = null;
+    let bestResult: ExtractionPayload | null = null;
+    let bestModel = this.configuredModel;
 
     for (let i = 0; i < this.modelChain.length; i++) {
       const candidateModel = this.modelChain[i];
@@ -424,7 +426,7 @@ ${ocrText}
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(modelBody),
-            signal: AbortSignal.timeout(25000),
+            signal: AbortSignal.timeout(45000),
           });
 
           // Requirement 7: Log model name, status code, and attempt count ONLY. No document content.
@@ -455,7 +457,7 @@ ${ocrText}
               modelFailed = true;
               break;
             }
-            // If vision model returned 200 but no OCR text or 0 extracted items, cascade if more candidates exist
+            // If vision model returned 200 but no OCR text, cascade to vision-capable model
             const hasImage = modelBody.contents?.[0]?.parts?.some((p: any) => p.inline_data);
             if (hasImage && (!parsed.ocr_text || parsed.ocr_text.trim().length < 10)) {
               // eslint-disable-next-line no-console
@@ -463,12 +465,35 @@ ${ocrText}
               modelFailed = true;
               break;
             }
-            if (hasImage && (!parsed.items || parsed.items.length === 0)) {
+
+            const itemsCount = parsed.items?.length || 0;
+            // Requirement 7: Log metrics only (length/count) — zero document content, zero PII
+            // eslint-disable-next-line no-console
+            console.log(
+              `[Gemini Extraction] model=${candidateModel} succeeded: ocrLen=${parsed.ocr_text?.length || 0} items=${itemsCount}`
+            );
+
+            // Track best result across models
+            if (!bestResult || itemsCount > (bestResult.items?.length || 0)) {
+              bestResult = parsed;
+              bestModel = candidateModel;
+            }
+
+            // If model extracted clinical items (> 0), we have high-confidence results — done!
+            if (itemsCount > 0) {
+              successfulModel = candidateModel;
+              parsedResult = parsed;
+              break;
+            }
+
+            // If 0 items on an image and more candidates remain in chain, check next model for higher recall
+            if (hasImage && itemsCount === 0 && i < this.modelChain.length - 1) {
               // eslint-disable-next-line no-console
-              console.log(`[Gemini Extraction] model=${candidateModel} extracted 0 items from image — cascading to next fallback`);
+              console.log(`[Gemini Extraction] model=${candidateModel} extracted 0 items — checking next model in chain for recall`);
               modelFailed = true;
               break;
             }
+
             successfulModel = candidateModel;
             parsedResult = parsed;
             break;
@@ -532,10 +557,16 @@ ${ocrText}
         }
       }
 
-      // If we got a parsed result with real OCR text, we're done
+      // If we got a parsed result with real OCR text and items > 0, we're done
       if (!modelFailed && parsedResult) {
         break;
       }
+    }
+
+    // If no model found items > 0, but at least one model produced valid OCR text, use that best result
+    if (!parsedResult && bestResult) {
+      parsedResult = bestResult;
+      successfulModel = bestModel;
     }
 
     if (!parsedResult) {
