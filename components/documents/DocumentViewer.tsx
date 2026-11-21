@@ -785,7 +785,7 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
       </div>
 
       {/* Main viewer grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Document Canvas Column */}
         <div className="lg:col-span-8 flex flex-col space-y-3">
           {/* Viewer Controls */}
@@ -994,8 +994,7 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
         </div>
 
         {/* Extracted Items & Provenance Column */}
-        <div className="lg:col-span-4 lg:sticky lg:top-4 lg:self-start">
-          <div className="bg-white border rounded-xl p-5 shadow-sm flex flex-col lg:max-h-[85vh]">
+        <div className="lg:col-span-4 bg-white border rounded-xl p-5 shadow-sm flex flex-col">
             <div className="flex items-center justify-between border-b pb-3 flex-shrink-0">
               <div className="flex items-center gap-2">
                 <Sparkles className="h-4 w-4 text-teal-600" />
@@ -1330,6 +1329,5 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
           </div>
         </div>
       </div>
-    </div>
   );
 }
