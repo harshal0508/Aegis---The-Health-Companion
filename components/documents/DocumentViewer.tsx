@@ -856,7 +856,7 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
           </div>
 
           {/* Canvas display */}
-          <div className="border rounded-xl bg-gray-100/70 p-4 min-h-[500px] flex items-center justify-center shadow-inner">
+          <div className="border rounded-xl bg-gray-100/70 p-4 min-h-[500px] flex-1 flex items-center justify-center shadow-inner">
             {currentPage?.is_pdf ? (
               <iframe
                 src={
@@ -994,8 +994,7 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
         </div>
 
         {/* Extracted Items & Provenance Column */}
-        <div className="lg:col-span-4 flex flex-col">
-          <div className="bg-white border rounded-xl p-5 shadow-sm flex flex-col h-full">
+        <div className="lg:col-span-4 bg-white border rounded-xl p-5 shadow-sm flex flex-col">
             <div className="flex items-center justify-between border-b pb-3 flex-shrink-0">
               <div className="flex items-center gap-2">
                 <Sparkles className="h-4 w-4 text-teal-600" />
@@ -1197,7 +1196,7 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
                 </div>
 
                 {/* Scrollable list of extracted records with dedicated visible scroll bar */}
-                <div className="overflow-y-auto flex-1 min-h-0 pr-2 space-y-3 custom-scrollbar overscroll-contain">
+                <div className="overflow-y-auto flex-1 min-h-[400px] lg:min-h-0 pr-2 space-y-3 custom-scrollbar overscroll-contain">
 
                 {items.map((item) => (
                   <div
@@ -1330,6 +1329,5 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
           </div>
         </div>
       </div>
-    </div>
   );
 }
