@@ -855,8 +855,8 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
             )}
           </div>
 
-          {/* Canvas display */}
-          <div className="border rounded-xl bg-gray-100/70 p-4 min-h-[500px] flex items-center justify-center shadow-inner">
+          {/* Canvas display — no forced height; shrink-wraps the image */}
+          <div className="border rounded-xl bg-gray-100/70 overflow-hidden shadow-inner">
             {currentPage?.is_pdf ? (
               <iframe
                 src={
